@@ -13,8 +13,6 @@ MANAGER_IP=$1
 AGENT_NAME=$2
 GROUP_LABEL=$3
 
-#!/bin/bash
-
 # Function to detect the distribution and architecture
 detect_distro_arch() {
     if [ -f /etc/os-release ]; then
@@ -68,28 +66,14 @@ install_wazuh_agent() {
     sudo systemctl start wazuh-agent
 }
 
-# Function to uninstall Wazuh agent
-uninstall_wazuh_agent() {
-    if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ]; then
-        sudo systemctl stop wazuh-agent
-        sudo dpkg -r wazuh-agent
-    elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
-        sudo systemctl stop wazuh-agent
-        sudo rpm -e wazuh-agent
-    else
-        echo "Unsupported distribution: $distro"
-        exit 1
-    fi
-}
-
 # Main script execution
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <WAZUH_MANAGER_IP> <WAZUH_AGENT_NAME>"
     exit 1
 fi
 
-WAZUH_MANAGER="$1"
-WAZUH_AGENT_NAME="$2"
+WAZUH_MANAGER="$MANAGER_IP"
+WAZUH_AGENT_NAME="$AGENT_NAME"
 
 detect_distro_arch
 install_wazuh_agent "$WAZUH_MANAGER" "$WAZUH_AGENT_NAME"
@@ -101,7 +85,7 @@ ossecConfPath="/var/ossec/etc/ossec.conf"
 sed -i "s/<address>.*<\/address>/<address>${MANAGER_IP}<\/address>/g" $ossecConfPath
 
 # Define the new directory to monitor
-newDirectory="<directories realtime=\"yes\">/home/*/Downloads</directories>"
+newDirectory="<directories check_all="yes" realtime=\"yes\">/media/user/software</directories>"
 
 # Check if the syscheck section exists
 if ! grep -q "<syscheck>" $ossecConfPath; then
@@ -116,4 +100,4 @@ echo "Directory monitoring configuration added successfully."
 
 
 # Start the Wazuh service
-systemctl start wazuh-agent
+sudo systemctl start wazuh-agent
