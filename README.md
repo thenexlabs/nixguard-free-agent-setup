@@ -1,0 +1,1 @@
+# nixguard-agent-setup
