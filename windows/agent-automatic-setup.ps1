@@ -3,6 +3,17 @@ param (
   [string]$ipAddress
 )
 
+# Check if the system is 64-bit or 32-bit
+if ([IntPtr]::Size -eq 8) {
+    # For 64-bit Windows
+    $ossecAgentPath = "C:\\Program Files (x86)\\ossec-agent"
+} else {
+    # For 32-bit Windows
+    $ossecAgentPath = "C:\\Program Files\\ossec-agent"
+}
+
+$configPath = $ossecAgentPath + "\\ossec.conf"
+
 function Uninstall-WazuhAgent {
     # Stop the Wazuh service
     Stop-Service -Name "WazuhSvc" -ErrorAction SilentlyContinue
@@ -11,7 +22,7 @@ function Uninstall-WazuhAgent {
     msiexec.exe /x $env:tmp\wazuh-agent.msi /q 2>$null
 
     # Remove the Wazuh agent installation directory
-    Remove-Item -Recurse -Force "C:\Program Files (x86)\ossec-agent" -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $ossecAgentPath -ErrorAction SilentlyContinue
 
     # Remove the Wazuh agent installation directory
     Remove-Item -Recurse -Force "C:\wazuh-agent" -ErrorAction SilentlyContinue
@@ -21,9 +32,7 @@ function Uninstall-WazuhAgent {
 Uninstall-WazuhAgent
 
 # Install the Wazuh agent
-$configPath = 'C:\Program Files (x86)\ossec-agent\ossec.conf'
-
-# loop until file is gone
+## loop until file is gone
 $fileExists = $true
 while ($fileExists) {
     # Check if the file exists
@@ -41,13 +50,18 @@ while ($fileExists) {
 }
 
 # Set a maximum number of retries
-$maxRetries = 5
+$maxRetries = 4
 $retryCount = 0
+
+# Write-Host "agent name: $agentName"
+# Write-Host "cloud soc ip: $ipAddress"
 
 # Start the installation process
 do {
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER=$ipAddress", "WAZUH_AGENT_NAME=$agentName", "WAZUH_REGISTRATION_SERVER=$ipAddress" -PassThru
-    $wazuhInstaller.WaitForExit()
+    # Download the Wazuh agent installer
+    Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.7.4-1.msi -OutFile "${env:tmp}\wazuh-agent"
+
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER=$ipAddress", "WAZUH_AGENT_NAME=$agentName", "WAZUH_REGISTRATION_SERVER=$ipAddress" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
@@ -88,12 +102,34 @@ $config = Get-Content -Path $configPath
 $config = $config -replace '<address>0.0.0.0</address>', "<address>$ipAddress</address>"
 Set-Content -Path $configPath -Value $config
 
+# Define the enrollment section
+$enrollmentSection = @"
+<enrollment>
+    <enabled>yes</enabled>
+    <manager_address>${ipAddress}</manager_address>
+    <agent_name>${agentName}</agent_name>
+</enrollment>
+"@
+
+# Write-Host "enrollment sec: $enrollmentSection"
+
+# Read the ossec.conf file
+$content = Get-Content -Path $configPath -Raw
+
+# Check if the enrollment section already exists
+if ($content -notmatch '<enrollment>') {
+    # Add the enrollment section to the ossec.conf file
+    $content = $content -replace '(?s)(<client>.*?)(</client>)', "`$1`n$enrollmentSection`n`$2"
+}
+
+# Write the modified content back to the ossec.conf
+$content | Set-Content -Path $configPath
+
 # File Integrity Monitoring Configuration
-$ossecConfPath = $configPath
 $newDirectory = @"
 <directories check_all="yes" whodata="yes" realtime="yes">$env:USERPROFILE\Downloads</directories>
 "@
-[xml]$ossecConf = Get-Content -Path $ossecConfPath
+[xml]$ossecConf = Get-Content -Path $configPath
 
 # Wait until the file is found
 while (-not $ossecConf) {
@@ -122,14 +158,11 @@ if ($commentNode) {
     $syscheckNode.AppendChild($fragment) | Out-Null
 }
 
-$ossecConf.Save($ossecConfPath)
+$ossecConf.Save($configPath)
 
 Write-Host "Directory monitoring configuration added successfully."
 
 ###########################################################################################
-
-# Set the current directory to the user's home directory
-Set-Location -Path $env:USERPROFILE
 
 # Define the URL of the Python installer
 $pythonUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
@@ -144,7 +177,7 @@ Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstallerPath
 Start-Process -FilePath $pythonInstallerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
 
 # Start a new PowerShell session to install PyInstaller
-Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -Command {py -m pip install pyinstaller}" -Wait
+py -m pip install pyinstaller
 
 # Define the URL of the remove-threat.py script
 $removeThreatUrl = "https://github.com/thenexlabs/nixguard-agent-setup/raw/main/windows/remove-threat.py"
@@ -155,11 +188,14 @@ $removeThreatPath = Join-Path -Path $env:TEMP -ChildPath "remove-threat.py"
 # Download the remove-threat.py script
 Invoke-WebRequest -Uri $removeThreatUrl -OutFile $removeThreatPath
 
+# Change the current location to the directory containing remove-threat.py
+Set-Location -Path $env:TEMP
+
 # Convert the remove-threat.py script to a Windows executable
 Invoke-Expression -Command "py -m PyInstaller -F $removeThreatPath"
 
 # Define the path of the executable file
-$exePath = Join-Path -Path (Get-Location) -ChildPath "dist\remove-threat.exe"
+$exePath = Join-Path -Path $env:TEMP -ChildPath "dist\remove-threat.exe"
 
 # Define the destination directory
 $destDir = "C:\Program Files (x86)\ossec-agent\active-response\bin"
@@ -168,9 +204,9 @@ $destDir = "C:\Program Files (x86)\ossec-agent\active-response\bin"
 Move-Item -Path $exePath -Destination $destDir
 
 # Define the paths of the spec file and the dist and build directories
-$specPath = Join-Path -Path (Get-Location) -ChildPath "remove-threat.spec"
-$distDir = Join-Path -Path (Get-Location) -ChildPath "dist"
-$buildDir = Join-Path -Path (Get-Location) -ChildPath "build"
+$specPath = Join-Path -Path $env:TEMP -ChildPath "remove-threat.spec"
+$distDir = Join-Path -Path $env:TEMP -ChildPath "dist"
+$buildDir = Join-Path -Path $env:TEMP -ChildPath "build"
 
 # Delete the spec file and the dist and build directories
 Remove-Item -Path $specPath -ErrorAction SilentlyContinue
