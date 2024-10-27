@@ -56,12 +56,10 @@ $retryCount = 0
 # Write-Host "agent name: $agentName"
 # Write-Host "cloud soc ip: $ipAddress"
 
-# Start the installation process
 do {
     # Download the Wazuh agent installer
-    Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.7.4-1.msi -OutFile "${env:tmp}\wazuh-agent"
-
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER=$ipAddress", "WAZUH_AGENT_NAME=$agentName", "WAZUH_REGISTRATION_SERVER=$ipAddress" -PassThru -Wait
+    Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_AGENT_GROUP='default'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
@@ -146,12 +144,30 @@ if (-not $syscheckNode) {
 # Find the comment and add the new directory after it
 $commentNode = $ossecConf.ossec_config.syscheck.SelectSingleNode("comment()[contains(.,'<!-- Default files to be monitored. -->')]")
 if ($commentNode) {
-    $newDirectoryNode = $ossecConf.CreateElement("directories")
-    $newDirectoryNode.SetAttribute("check_all", "yes")
-    $newDirectoryNode.SetAttribute("whodata", "yes")
-    $newDirectoryNode.SetAttribute("realtime", "yes")
-    $newDirectoryNode.InnerText = "$env:USERPROFILE\Downloads"
-    $syscheckNode.InsertAfter($newDirectoryNode, $commentNode) | Out-Null
+    $directories = @(
+        "$env:WINDIR",
+        "$env:ProgramFiles",
+        "$env:ProgramFiles(x86)",
+        "HKEY_LOCAL_MACHINE\SYSTEM",
+        "$env:WINDIR\System32",
+        "$env:WINDIR\SysWOW64",
+        "$env:USERPROFILE",
+        "$env:ProgramData",
+        "$env:ProgramFiles\Common Files",
+        "$env:ProgramFiles(x86)\Common Files",
+        "$env:WINDIR\Boot",
+        "$env:WINDIR\Temp",
+        "$env:USERPROFILE\Downloads"
+    )
+
+    foreach ($directory in $directories) {
+        $newDirectoryNode = $ossecConf.CreateElement("directories")
+        $newDirectoryNode.SetAttribute("check_all", "yes")
+        $newDirectoryNode.SetAttribute("whodata", "yes")
+        $newDirectoryNode.SetAttribute("realtime", "yes")
+        $newDirectoryNode.InnerText = $directory
+        $syscheckNode.InsertAfter($newDirectoryNode, $commentNode) | Out-Null
+    }
 } else {
     $fragment = $ossecConf.CreateDocumentFragment()
     $fragment.InnerXml = $newDirectory
@@ -159,7 +175,6 @@ if ($commentNode) {
 }
 
 $ossecConf.Save($configPath)
-
 Write-Host "Directory monitoring configuration added successfully."
 
 ###########################################################################################
