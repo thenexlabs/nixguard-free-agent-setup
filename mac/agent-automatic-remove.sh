@@ -15,17 +15,27 @@ detect_arch() {
 
 # Function to uninstall Wazuh agent
 uninstall_wazuh_agent() {
-    # Stop the Wazuh agent
-    sudo /Library/Ossec/bin/wazuh-control stop
+    echo "Stopping Wazuh agent..."
+    if sudo /Library/Ossec/bin/wazuh-control stop; then
+        echo "Wazuh agent stopped successfully."
+    else
+        echo "Failed to stop Wazuh agent."
+    fi
 
-    # Remove the Wazuh agent
-    sudo pkgutil --forget com.wazuh.agent
+    echo "Removing Wazuh agent package..."
+    if sudo pkgutil --forget com.wazuh.agent; then
+        echo "Wazuh agent package removed successfully."
+    else
+        echo "Failed to remove Wazuh agent package."
+    fi
 
-    # Clean up files
+    echo "Cleaning up files..."
     sudo rm -rf /Library/Ossec
     sudo rm -f /usr/local/bin/agent-auth
     sudo rm -f /usr/local/bin/wazuh-control
     sudo rm -f /tmp/wazuh_envs
+
+    echo "Cleanup completed."
 }
 
 # Main script execution

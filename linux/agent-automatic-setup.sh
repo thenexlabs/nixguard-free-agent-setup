@@ -91,19 +91,19 @@ install_wazuh_agent() {
 
             # Define the new directories to monitor
             directories=(
-                "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/boot</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/tmp</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/opt</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/sbin</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/lib</directories>"
-                "<directories check_all=\"yes\" realtime=\"yes\">/lib64</directories>"
+                "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"  # Root directory
+                "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
+                "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
+                "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
+                "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
+                "<directories check_all=\"yes\" realtime=\"yes\">/boot</directories>"  # Boot files
+                "<directories check_all=\"yes\" realtime=\"yes\">/opt</directories>"  # Optional software
+                "<directories check_all=\"yes\" realtime=\"yes\">/sbin</directories>"  # System binaries
+                "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
+                "<directories check_all=\"yes\" realtime=\"yes\">/lib</directories>"  # Libraries
+                "<directories check_all=\"yes\" realtime=\"yes\">/lib64</directories>"  # 64-bit libraries
             )
+            # Excluding the /tmp directory as it typically contains many transient files
 
             # Check if the syscheck section exists
             if ! sudo grep -q "<syscheck>" $ossecConfPath; then

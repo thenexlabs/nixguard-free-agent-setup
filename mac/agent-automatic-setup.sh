@@ -1,51 +1,62 @@
 #!/bin/bash
+# ./mac_setup.sh "your_manager_ip" "your_agent_name"
 
 # Check if two arguments are passed
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <manager_ip> <agent_name>"
+    echo "Usage: ./mac_setup.sh <manager_ip> <agent_name>"
     exit 1
 fi
 
 # Define the manager IP and agent name from command-line arguments
 MANAGER_IP=$1
 AGENT_NAME=$2
+GROUP_LABEL="default"
 
-# Function to detect the architecture
-detect_arch() {
-    arch=$(uname -m)
-    if [ "$arch" == "x86_64" ]; then
-        arch="intel"
-    elif [ "$arch" == "arm64" ]; then
-        arch="arm64"
+# Function to uninstall Wazuh agent on macOS
+uninstall_wazuh_agent() {
+    if brew list --cask | grep -Fq 'wazuh-agent'; then
+        sudo brew services stop wazuh-agent
+        sudo brew uninstall --cask wazuh-agent
     else
-        echo "Unsupported architecture: $arch"
-        exit 1
+        echo "wazuh-agent is not installed"
     fi
 }
 
-# Function to install Wazuh agent
+# Function to install Wazuh agent on macOS
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
     local WAZUH_AGENT_NAME="$AGENT_NAME"
 
-    if [ "$arch" == "intel" ]; then
-        curl -so wazuh-agent.pkg https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.3-1.intel64.pkg
+    echo "Private cloud SOC IP: $WAZUH_MANAGER"
+    echo "Agent name: $WAZUH_AGENT_NAME"
+    echo "Agent group: $GROUP_LABEL"
+
+    arch=$(uname -m)
+    if [ "$arch" == "x86_64" ]; then
+        wget -O wazuh-agent_macos.pkg https://packages.wazuh.com/4.x/macos/wazuh-agent-4.9.1-1.intel64.pkg
     elif [ "$arch" == "arm64" ]; then
-        curl -so wazuh-agent.pkg https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.3-1.arm64.pkg
+        wget -O wazuh-agent_macos.pkg https://packages.wazuh.com/4.x/macos/wazuh-agent-4.9.1-1.arm64.pkg
+    else
+        echo "Unsupported architecture: $arch"
+        exit 1
     fi
 
-    echo "WAZUH_MANAGER='$WAZUH_MANAGER' WAZUH_AGENT_NAME='$WAZUH_AGENT_NAME'" > /tmp/wazuh_envs
-    sudo installer -pkg ./wazuh-agent.pkg -target /
-}
+    sudo installer -pkg wazuh-agent_macos.pkg -target /
 
-# Function to start the Wazuh agent
-start_wazuh_agent() {
-    sudo /Library/Ossec/bin/wazuh-control start
+    # Start the Wazuh agent
+    sudo brew services start wazuh-agent
+
+    echo "NixGuard agent started successfully."
 }
 
 # Main script execution
-detect_arch
-install_wazuh_agent
-start_wazuh_agent
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <WAZUH_MANAGER_IP> <WAZUH_AGENT_NAME>"
+    exit 1
+fi
 
-echo "Wazuh agent installed and started successfully."
+# Uninstall any existing Wazuh agent
+uninstall_wazuh_agent
+
+# Install and configure the Wazuh agent
+install_wazuh_agent

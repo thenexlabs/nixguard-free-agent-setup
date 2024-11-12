@@ -145,19 +145,15 @@ if (-not $syscheckNode) {
 $commentNode = $ossecConf.ossec_config.syscheck.SelectSingleNode("comment()[contains(.,'<!-- Default files to be monitored. -->')]")
 if ($commentNode) {
     $directories = @(
-        "$env:WINDIR",
-        "$env:ProgramFiles",
-        "$env:ProgramFiles(x86)",
-        "HKEY_LOCAL_MACHINE\SYSTEM",
-        "$env:WINDIR\System32",
-        "$env:WINDIR\SysWOW64",
-        "$env:USERPROFILE",
-        "$env:ProgramData",
-        "$env:ProgramFiles\Common Files",
-        "$env:ProgramFiles(x86)\Common Files",
-        "$env:WINDIR\Boot",
-        "$env:WINDIR\Temp",
-        "$env:USERPROFILE\Downloads"
+        "$env:WINDIR\System32",  # Critical system files
+        "$env:ProgramFiles",  # Installed programs
+        "$env:ProgramFiles(x86)",  # 32-bit installed programs
+        "HKEY_LOCAL_MACHINE\SYSTEM",  # Registry settings
+        "$env:USERPROFILE",  # User profile
+        "$env:ProgramData",  # Program data
+        "$env:ProgramFiles\Common Files",  # Common program files
+        "$env:ProgramFiles(x86)\Common Files",  # 32-bit common program files
+        "$env:USERPROFILE\Downloads"  # User Downloads directory
     )
 
     foreach ($directory in $directories) {
