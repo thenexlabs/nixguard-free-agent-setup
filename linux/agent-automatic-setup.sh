@@ -61,6 +61,37 @@ fix_dependencies() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get -f install -y
 }
 
+remove_directories_tags() {
+    local ossecConfPath=$1
+
+    # Backup the original file
+    sudo cp $ossecConfPath ${ossecConfPath}.bak
+
+    # Remove all <directories> tags and their content
+    sudo sed -i '/<directories>/,/<\/directories>/d' $ossecConfPath
+
+    echo "All <directories> tags have been removed."
+}
+
+add_new_directories() {
+    local ossecConfPath=$1
+    shift
+    local directories=("$@")
+
+    # Check if the syscheck section exists
+    if ! sudo grep -q "<syscheck>" $ossecConfPath; then
+        # If syscheck section does not exist, create it
+        sudo sed -i '/<\/ossec_config>/i \ \ <syscheck>\n\ \ </syscheck>' $ossecConfPath
+    fi
+
+    # Add the new directory monitoring configuration
+    for directory in "${directories[@]}"; do
+        sudo sed -i "/<syscheck>/a \ \ $directory" $ossecConfPath
+    done
+
+    echo "New <directories> tags have been added."
+}
+
 # Function to install Wazuh agent
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
@@ -108,18 +139,14 @@ install_wazuh_agent() {
             "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
             "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
         )
+
         # Excluding the /tmp directory as it typically contains many transient files
 
-        # Check if the syscheck section exists
-        if ! sudo grep -q "<syscheck>" $ossecConfPath; then
-            # If syscheck section does not exist, create it
-            sudo sed -i '/<\/ossec_config>/i \ \ <syscheck>\n\ \ </syscheck>' $ossecConfPath
-        fi
+        # Function to remove old directories tags
+        remove_directories_tags $ossecConfPath
 
-        # Add the new directory monitoring configuration
-        for directory in "${directories[@]}"; do
-            sudo sed -i "/<syscheck>/a \ \ $directory" $ossecConfPath
-        done
+        # Function to add new directories tags
+        add_new_directories $ossecConfPath "${directories[@]}"
 
         echo "Directory monitoring configuration added successfully."
 
