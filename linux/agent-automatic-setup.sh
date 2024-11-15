@@ -84,12 +84,15 @@ add_new_directories() {
         sudo sed -i '/<\/ossec_config>/i \ \ <syscheck>\n\ \ </syscheck>' $ossecConfPath
     fi
 
-    # Add the new directory monitoring configuration
-    for directory in "${directories[@]}"; do
-        sudo sed -i "/<syscheck>/a \ \ $directory" $ossecConfPath
+    # Find the line number of the comment containing the word "Directories"
+    local line_number=$(sudo grep -n "Directories" $ossecConfPath | cut -d: -f1)
+
+    # Insert the new directories after the comment containing the word "Directories"
+    for (( i=${#directories[@]}-1 ; i>=0 ; i-- )); do
+        sudo sed -i "${line_number}a \ \ ${directories[$i]}" $ossecConfPath
     done
 
-    echo "New <directories> tags have been added."
+    echo "New <directories> tags have been added after the comment containing the word 'Directories'."
 }
 
 # Function to install Wazuh agent
