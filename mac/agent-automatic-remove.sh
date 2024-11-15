@@ -13,20 +13,20 @@ detect_arch() {
     fi
 }
 
-# Function to uninstall Wazuh agent
+# Function to uninstall NixGuard agent
 uninstall_wazuh_agent() {
-    echo "Stopping Wazuh agent..."
+    echo "Stopping NixGuard agent..."
     if sudo /Library/Ossec/bin/wazuh-control stop; then
-        echo "Wazuh agent stopped successfully."
+        echo "NixGuard agent stopped successfully."
     else
-        echo "Failed to stop Wazuh agent."
+        echo "Failed to stop NixGuard agent."
     fi
 
-    echo "Removing Wazuh agent package..."
+    echo "Removing NixGuard agent package..."
     if sudo pkgutil --forget com.wazuh.agent; then
-        echo "Wazuh agent package removed successfully."
+        echo "NixGuard agent package removed successfully."
     else
-        echo "Failed to remove Wazuh agent package."
+        echo "Failed to remove NixGuard agent package."
     fi
 
     echo "Cleaning up files..."
@@ -42,4 +42,4 @@ uninstall_wazuh_agent() {
 detect_arch
 uninstall_wazuh_agent
 
-echo "Wazuh agent removed successfully."
+echo "NixGuard agent removed successfully."

@@ -104,7 +104,7 @@ install_wazuh_agent() {
     echo "WAZUH_MANAGER='${WAZUH_MANAGER}'" > /tmp/wazuh_envs
     sudo installer -pkg wazuh-agent_macos.pkg -target /
 
-    echo "Wazuh agent installed successfully."
+    echo "NixGuard agent installed successfully."
 
     # Start the Wazuh agent
     sudo /Library/Ossec/bin/wazuh-control start

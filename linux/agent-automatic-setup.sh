@@ -172,7 +172,7 @@ install_wazuh_agent() {
 
 # Main script execution
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <WAZUH_MANAGER_IP> <WAZUH_AGENT_NAME>"
+    echo "Usage: $0 <WAZUH_MANAGER> <WAZUH_AGENT_NAME>"
     exit 1
 fi
 
