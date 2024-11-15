@@ -103,6 +103,8 @@ fix_dependencies() {
         return 1
     fi
 
+    sudo usermod -aG systemd-journal wazuh
+
     echo "Dependency fix process completed successfully."
     return 0
 }
