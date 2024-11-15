@@ -103,8 +103,6 @@ fix_dependencies() {
         return 1
     fi
 
-    sudo usermod -aG systemd-journal wazuh
-
     echo "Dependency fix process completed successfully."
     return 0
 }
@@ -179,6 +177,9 @@ install_wazuh_agent() {
             /<client>/ { print; print enrollment; next }
             !/<enrollment>/ { print }
         ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
+
+        # Update the log_format in the ossec.conf file to json 
+        sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
 
         # Define the new directories to monitor
         directories=(
