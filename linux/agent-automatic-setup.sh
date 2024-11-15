@@ -153,10 +153,10 @@ install_wazuh_agent() {
 
     if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ] || [ "$distro" == "kali" ]; then
         if [ "$arch" == "amd64" ]; then
-            wget -O wazuh-agent_nixguard_amd64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_amd64.deb
+            sudo wget -O wazuh-agent_nixguard_amd64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_amd64.deb
             sudo DEBIAN_FRONTEND=noninteractive dpkg -i ./wazuh-agent_nixguard_amd64.deb
         elif [ "$arch" == "aarch64" ]; then
-            wget -O wazuh-agent_nixguard_arm64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_arm64.deb
+            sudo wget -O wazuh-agent_nixguard_arm64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_arm64.deb
             sudo DEBIAN_FRONTEND=noninteractive dpkg -i ./wazuh-agent_nixguard_arm64.deb
         fi
 
@@ -214,7 +214,7 @@ install_wazuh_agent() {
         removeThreatPath="$destDir/remove-threat.sh"
 
         # Download the remove-threat.sh script
-        sudo curl -o $removeThreatPath $removeThreatUrl
+        sudo wget -o $removeThreatPath $removeThreatUrl
 
         sudo chmod 750 /var/ossec/active-response/bin/remove-threat.sh
         sudo chown root:wazuh /var/ossec/active-response/bin/remove-threat.sh
@@ -226,10 +226,10 @@ install_wazuh_agent() {
         echo "NixGuard agent setup successfully."
     elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
         if [ "$arch" == "amd64" ]; then
-            curl -O wazuh-agent_nixguard.x86_64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.x86_64.rpm
+            sudo wget -O wazuh-agent_nixguard.x86_64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.x86_64.rpm
             sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" rpm -ihv wazuh-agent_nixguard.x86_64.rpm
         elif [ "$arch" == "aarch64" ]; then
-            curl -O wazuh-agent_nixguard.aarch64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.aarch64.rpm
+            sudo wget -O wazuh-agent_nixguard.aarch64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.aarch64.rpm
             sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" rpm -ihv wazuh-agent_nixguard.aarch64.rpm
         fi
     else
