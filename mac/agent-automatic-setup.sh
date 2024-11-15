@@ -55,6 +55,7 @@ configure_ossec_conf() {
         "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
         # "<directories check_all=\"yes\" realtime=\"yes\">/lib</directories>"  # Libraries
         # "<directories check_all=\"yes\" realtime=\"yes\">/lib64</directories>"  # 64-bit libraries
+        "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
     )
     # Excluding the /tmp directory as it typically contains many transient files
 
