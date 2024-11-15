@@ -55,10 +55,56 @@ uninstall_wazuh_agent() {
     fi
 }
 
-# Function to fix broken dependencies
+# Function to fix broken dependencies and ensure auditd is installed and running
 fix_dependencies() {
+    echo "Starting dependency fix process..."
+
+    # Update the package lists
     sudo DEBIAN_FRONTEND=noninteractive apt-get update
+    if [ $? -ne 0 ]; then
+        echo "Failed to update package lists. Please check your network connection."
+        return 1
+    fi
+
+    # Attempt to fix broken dependencies
     sudo DEBIAN_FRONTEND=noninteractive apt-get -f install -y
+    if [ $? -ne 0 ]; then
+        echo "Failed to fix broken dependencies. Please check the logs for more details."
+        return 1
+    fi
+
+    # Install auditd and ensure it's running based on the distro
+    if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ] || [ "$distro" == "kali" ]; then
+        sudo apt-get install -y auditd audispd-plugins
+        if [ $? -ne 0 ]; then
+            echo "Failed to install auditd on $distro. Please check the logs for more details."
+            return 1
+        fi
+        sudo systemctl enable auditd
+        sudo systemctl start auditd
+        if [ $? -ne 0 ]; then
+            echo "Failed to start auditd on $distro. Please check the logs for more details."
+            return 1
+        fi
+    elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
+        sudo yum install -y audit
+        if [ $? -ne 0 ]; then
+            echo "Failed to install auditd on $distro. Please check the logs for more details."
+            return 1
+        fi
+        sudo systemctl enable auditd
+        sudo systemctl start auditd
+        if [ $? -ne 0 ]; then
+            echo "Failed to start auditd on $distro. Please check the logs for more details."
+            return 1
+        fi
+    else
+        echo "Unsupported distribution: $distro"
+        return 1
+    fi
+
+    echo "Dependency fix process completed successfully."
+    return 0
 }
 
 remove_directories_tags() {
