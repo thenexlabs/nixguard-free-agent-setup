@@ -56,6 +56,12 @@ uninstall_wazuh_agent() {
     fi
 }
 
+# Function to fix broken dependencies
+fix_dependencies() {
+    sudo apt-get update
+    sudo apt-get -f install -y
+}
+
 # Function to install Wazuh agent
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
@@ -161,6 +167,9 @@ install_wazuh_agent() {
         echo "Unsupported distribution: $distro"
         exit 1
     fi
+
+    # Fix dependencies
+    fix_dependencies
 
     # Start the Wazuh agent
     sudo systemctl daemon-reload
