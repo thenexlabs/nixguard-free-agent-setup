@@ -186,26 +186,26 @@ install_wazuh_agent() {
         ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
 
         # Update the log_format in the ossec.conf file to json
-        sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
+        # sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
 
         # Define the new directories to monitor with whodata enabled
         directories=(
-            "<directories check_all=\"yes\" whodata=\"yes\">/root</directories>"  # Root directory
-            "<directories check_all=\"yes\" whodata=\"yes\">/etc</directories>"  # Configuration files
-            "<directories check_all=\"yes\" whodata=\"yes\">/var</directories>"  # Variable files (limited)
-            "<directories check_all=\"yes\" whodata=\"yes\">/usr</directories>"  # User programs
-            "<directories check_all=\"yes\" whodata=\"yes\">/home</directories>"  # Home directories
-            "<directories check_all=\"yes\" whodata=\"yes\">/bin</directories>"  # Binaries
-            "<directories check_all=\"yes\" whodata=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/root</directories>"  # Root directory
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/etc</directories>"  # Configuration files
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/var</directories>"  # Variable files (limited)
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/usr</directories>"  # User programs
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/home</directories>"  # Home directories
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">/bin</directories>"  # Binaries
+            "<directories check_all=\"yes\" realtime=\"yes\" whodata=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
         )
 
         # Excluding the /tmp directory as it typically contains many transient files
 
         # Function to remove old directories tags
-        # remove_directories_tags $ossecConfPath
+        remove_directories_tags $ossecConfPath
 
         # Function to add new directories tags
-        # add_new_directories $ossecConfPath "${directories[@]}"
+        add_new_directories $ossecConfPath "${directories[@]}"
 
         echo "Directory monitoring configuration added successfully."
 
