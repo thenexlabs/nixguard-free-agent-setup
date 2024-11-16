@@ -56,7 +56,6 @@ uninstall_wazuh_agent() {
 }
 
 # Function to fix broken dependencies and ensure auditd is installed and running
-# Function to fix broken dependencies and ensure auditd is installed and running
 fix_dependencies() {
     echo "Starting dependency fix process..."
 
@@ -226,7 +225,7 @@ install_wazuh_agent() {
         removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
 
         # Define the destination directory
-        destDir="/var/ossec/active-response/bin"
+        destDir="~/var/ossec/active-response/bin"
 
         # Define the path to save the remove-threat.sh script in the destination directory
         removeThreatPath="$destDir/remove-threat.sh"
