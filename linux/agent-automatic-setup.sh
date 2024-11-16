@@ -189,13 +189,13 @@ install_wazuh_agent() {
 
         # Define the new directories to monitor with whodata enabled
         directories=(
-            "<directories realtime=\"yes\">/root</directories>"  # Root directory
-            "<directories realtime=\"yes\">/etc</directories>"  # Configuration files
-            "<directories realtime=\"yes\">/var</directories>"  # Variable files (limited)
-            "<directories realtime=\"yes\">/usr</directories>"  # User programs
-            "<directories realtime=\"yes\">/home</directories>"  # Home directories
-            "<directories realtime=\"yes\">/bin</directories>"  # Binaries
-            "<directories realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
+            "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"  # Root directory
+            # "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
+            # "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
+            # "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
+            # "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
+            # "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
+            "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
         )
 
         # Excluding the /tmp directory as it typically contains many transient files
