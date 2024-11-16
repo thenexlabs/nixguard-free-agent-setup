@@ -76,14 +76,14 @@ configure_ossec_conf() {
     # Define the new directories to monitor
     directories=(
         "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"  # Root directory
-        "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
-        "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
-        "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
-        "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
+        # "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
+        # "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
+        # "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
+        # "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
         # "<directories check_all=\"yes\" realtime=\"yes\">/boot</directories>"  # Boot files
         # "<directories check_all=\"yes\" realtime=\"yes\">/opt</directories>"  # Optional software
         # "<directories check_all=\"yes\" realtime=\"yes\">/sbin</directories>"  # System binaries
-        "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
+        # "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
         # "<directories check_all=\"yes\" realtime=\"yes\">/lib</directories>"  # Libraries
         # "<directories check_all=\"yes\" realtime=\"yes\">/lib64</directories>"  # 64-bit libraries
         "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
