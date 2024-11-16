@@ -56,6 +56,7 @@ uninstall_wazuh_agent() {
 }
 
 # Function to fix broken dependencies and ensure auditd is installed and running
+# Function to fix broken dependencies and ensure auditd is installed and running
 fix_dependencies() {
     echo "Starting dependency fix process..."
 
@@ -101,6 +102,12 @@ fix_dependencies() {
     else
         echo "Unsupported distribution: $distro"
         return 1
+    fi
+
+    # Ensure auditd is not disabled by default
+    if auditctl -l | grep -q '^-a never,task'; then
+        sudo sed -i '/^-a never,task/d' /etc/audit/rules.d/audit.rules
+        sudo systemctl restart auditd
     fi
 
     echo "Dependency fix process completed successfully."
@@ -178,29 +185,37 @@ install_wazuh_agent() {
             !/<enrollment>/ { print }
         ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
 
-        # Update the log_format in the ossec.conf file to json 
+        # Update the log_format in the ossec.conf file to json
         sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
 
-        # Define the new directories to monitor
+        # Define the new directories to monitor with whodata enabled
         directories=(
-            "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"  # Root directory
-            "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
-            "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
-            "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
-            "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
-            "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
-            "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
+            "<directories check_all=\"yes\" whodata=\"yes\">/root</directories>"  # Root directory
+            "<directories check_all=\"yes\" whodata=\"yes\">/etc</directories>"  # Configuration files
+            "<directories check_all=\"yes\" whodata=\"yes\">/var</directories>"  # Variable files (limited)
+            "<directories check_all=\"yes\" whodata=\"yes\">/usr</directories>"  # User programs
+            "<directories check_all=\"yes\" whodata=\"yes\">/home</directories>"  # Home directories
+            "<directories check_all=\"yes\" whodata=\"yes\">/bin</directories>"  # Binaries
+            "<directories check_all=\"yes\" whodata=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
         )
 
         # Excluding the /tmp directory as it typically contains many transient files
 
         # Function to remove old directories tags
-        remove_directories_tags $ossecConfPath
+        # remove_directories_tags $ossecConfPath
 
         # Function to add new directories tags
-        add_new_directories $ossecConfPath "${directories[@]}"
+        # add_new_directories $ossecConfPath "${directories[@]}"
 
         echo "Directory monitoring configuration added successfully."
+
+        # Restart Wazuh Agent to apply the new configuration
+        sudo systemctl restart wazuh-agent
+
+        # Verify if the audit rules for monitoring the selected directories are applied
+        auditctl -l | grep wazuh_fim
+
+        echo "Wazuh agent installed and configured successfully."
 
         ###########################################################################################
 
