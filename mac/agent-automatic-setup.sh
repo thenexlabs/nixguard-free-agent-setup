@@ -14,9 +14,9 @@ GROUP_LABEL="default"
 
 # Function to uninstall Wazuh agent on macOS
 uninstall_wazuh_agent() {
-    if [ -d "/Library/Ossec" ]; then
-        sudo /Library/Ossec/bin/wazuh-control stop
-        sudo rm -rf /Library/Ossec
+    if [ -d "~/Library/Ossec" ]; then
+        sudo ~/Library/Ossec/bin/wazuh-control stop
+        sudo rm -rf ~/Library/Ossec
     else
         echo "wazuh-agent is not installed"
     fi
@@ -59,7 +59,7 @@ configure_ossec_conf() {
     local WAZUH_AGENT_NAME="$AGENT_NAME"
 
     # Define the path to the OSSEC configuration file
-    ossecConfPath="/Library/Ossec/etc/ossec.conf"
+    ossecConfPath="~/Library/Ossec/etc/ossec.conf"
 
     # Set the manager IP in the ossec.conf file
     sudo sed -i '' "s/<address>.*<\/address>/<address>${WAZUH_MANAGER}<\/address>/g" $ossecConfPath
@@ -79,7 +79,7 @@ configure_ossec_conf() {
         # "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
         # "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
         # "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
-        # "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
+        "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
         # "<directories check_all=\"yes\" realtime=\"yes\">/boot</directories>"  # Boot files
         # "<directories check_all=\"yes\" realtime=\"yes\">/opt</directories>"  # Optional software
         # "<directories check_all=\"yes\" realtime=\"yes\">/sbin</directories>"  # System binaries
@@ -134,7 +134,7 @@ install_wazuh_agent() {
     echo "NixGuard agent installed successfully."
 
     # Start the Wazuh agent
-    sudo /Library/Ossec/bin/wazuh-control start
+    sudo ~/Library/Ossec/bin/wazuh-control start
 
     echo "NixGuard agent started successfully."
 }
@@ -142,7 +142,7 @@ install_wazuh_agent() {
 # Function to download and install the remove-threat.sh script
 install_remove_threat_script() {
     local removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
-    local destDir="/Library/Ossec/active-response/bin"
+    local destDir="~/Library/Ossec/active-response/bin"
     local removeThreatPath="$destDir/remove-threat.sh"
 
     # Download the remove-threat.sh script
