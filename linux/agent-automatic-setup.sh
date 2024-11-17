@@ -193,7 +193,7 @@ install_wazuh_agent() {
             # "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
             # "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
             # "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
-            # "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
+            "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
             # "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
             "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
         )
@@ -233,8 +233,8 @@ install_wazuh_agent() {
         # Download the remove-threat.sh script
         sudo wget -o $removeThreatPath $removeThreatUrl
 
-        sudo chmod 750 /var/ossec/active-response/bin/remove-threat.sh
-        sudo chown root:wazuh /var/ossec/active-response/bin/remove-threat.sh
+        sudo chmod 750 ~/var/ossec/active-response/bin/remove-threat.sh
+        sudo chown root:wazuh ~/var/ossec/active-response/bin/remove-threat.sh
 
         echo "Virus threat response configuration added successfully."
 
