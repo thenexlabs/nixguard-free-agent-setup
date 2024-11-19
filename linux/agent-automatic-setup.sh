@@ -224,10 +224,13 @@ install_wazuh_agent() {
 
         # Adding the ignore tag for /home/.cache
         ignore_directories=(
-            "<ignore>${HOME}/.*</ignore>"
-            "<ignore>${HOME}/.mozilla</ignore>"
-            "<ignore>${HOME}/.cache</ignore>"
-            "<ignore>/home/.*</ignore>"
+            <ignore type="sregex">^/home/[^/]+/\..*</ignore>
+            # <ignore type="sregex">^${HOME}/[^/]+/\..*</ignore>
+            # "<ignore>${HOME}/.*</ignore>"
+            # "<ignore>${HOME}/.mozilla</ignore>"
+            # "<ignore>${HOME}/.cache</ignore>"
+            # "<ignore>${HOME}/.config</ignore>"
+            # "<ignore>${HOME}/.local</ignore>"
         )
 
         # Function to remove old directories tags
