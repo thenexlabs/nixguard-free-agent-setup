@@ -113,7 +113,7 @@ configure_ossec_conf() {
 
     # Define the new ignore directories
     ignore_directories=(
-        "<ignore>/home/.cache</ignore>"
+        "<ignore>/home/.*</ignore>"
     )
 
     # Excluding the /tmp directory as it typically contains many transient files
