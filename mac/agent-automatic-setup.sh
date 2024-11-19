@@ -53,6 +53,28 @@ add_new_directories() {
     echo "New <directories> tags have been added."
 }
 
+add_ignore_directories() {
+    local ossecConfPath=$1
+    shift
+    local ignore_directories=("$@")
+
+    # Check if the syscheck section exists
+    if ! sudo grep -q "<syscheck>" $ossecConfPath; then
+        # If syscheck section does not exist, create it
+        sudo sed -i '' '/<\/ossec_config>/i \ \ <syscheck>\n\ \ </syscheck>' $ossecConfPath
+    fi
+
+    # Find the line number of the comment containing the words "Files/directories to ignore"
+    local line_number=$(sudo grep -n "<!-- Files/directories to ignore -->" $ossecConfPath | cut -d: -f1)
+
+    # Insert the new ignore directories after the comment
+    for (( i=${#ignore_directories[@]}-1 ; i>=0 ; i-- )); do
+        sudo sed -i '' "${line_number}a \ \ ${ignore_directories[$i]}" $ossecConfPath
+    done
+
+    echo "New <ignore> tags have been added after the comment 'Files/directories to ignore'."
+}
+
 # Function to configure the ossec.conf file
 configure_ossec_conf() {
     local WAZUH_MANAGER="$MANAGER_IP"
@@ -88,6 +110,12 @@ configure_ossec_conf() {
         # "<directories check_all=\"yes\" realtime=\"yes\">/lib64</directories>"  # 64-bit libraries
         "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
     )
+
+    # Define the new ignore directories
+    ignore_directories=(
+        "<ignore>/home/.cache</ignore>"
+    )
+
     # Excluding the /tmp directory as it typically contains many transient files
 
     # Function to remove old directories tags
@@ -95,6 +123,9 @@ configure_ossec_conf() {
 
     # Function to add new directories tags
     add_new_directories $ossecConfPath "${directories[@]}"
+
+    # Function to add ignore directories tags
+    add_ignore_directories $ossecConfPath "${ignore_directories[@]}"
 
     echo "Directory monitoring configuration added successfully."
 }
