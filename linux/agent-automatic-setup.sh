@@ -225,6 +225,7 @@ install_wazuh_agent() {
         # Adding the ignore tag for /home/.cache
         ignore_directories=(
             "<ignore>/home/.*</ignore>"
+            "<ignore>${HOME}/.*</ignore>"
         )
 
         # Function to remove old directories tags
