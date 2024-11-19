@@ -255,7 +255,7 @@ install_wazuh_agent() {
         removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
 
         # Define the destination directory
-        destDir="~/var/ossec/active-response/bin"
+        destDir="/var/ossec/active-response/bin"
 
         # Define the path to save the remove-threat.sh script in the destination directory
         removeThreatPath="$destDir/remove-threat.sh"
@@ -263,8 +263,8 @@ install_wazuh_agent() {
         # Download the remove-threat.sh script
         sudo wget -o $removeThreatPath $removeThreatUrl
 
-        sudo chmod 750 ~/var/ossec/active-response/bin/remove-threat.sh
-        sudo chown root:wazuh ~/var/ossec/active-response/bin/remove-threat.sh
+        sudo chmod 750 /var/ossec/active-response/bin/remove-threat.sh
+        sudo chown root:wazuh /var/ossec/active-response/bin/remove-threat.sh
 
         echo "Virus threat response configuration added successfully."
 
