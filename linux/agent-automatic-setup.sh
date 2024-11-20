@@ -224,11 +224,13 @@ install_wazuh_agent() {
 
         # Adding the ignore tag for /home/.cache
         ignore_directories=(
-            # "<ignore>${HOME}/.*</ignore>"
             "<ignore>${HOME}/.mozilla</ignore>"
             "<ignore>${HOME}/.cache</ignore>"
             "<ignore>${HOME}/.config</ignore>"
             "<ignore>${HOME}/.local</ignore>"
+            "<ignore>${HOME}/.xsession-errors</ignore>"
+            "<ignore>/root/.wget-hsts</ignore>"
+            "<ignore>/root/.rpmdb</ignore>"
         )
 
         # Function to remove old directories tags
