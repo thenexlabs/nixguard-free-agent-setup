@@ -267,7 +267,7 @@ install_wazuh_agent() {
         removeThreatPath="$destDir/remove-threat.sh"
 
         # Download the remove-threat.sh script
-        sudo wget -o $removeThreatPath $removeThreatUrl
+        sudo wget -O $removeThreatPath $removeThreatUrl
 
         sudo chmod 750 /var/ossec/active-response/bin/remove-threat.sh
         sudo chown root:wazuh /var/ossec/active-response/bin/remove-threat.sh
