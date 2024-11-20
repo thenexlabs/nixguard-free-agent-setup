@@ -183,7 +183,7 @@ install_remove_threat_script() {
     local removeThreatPath="$destDir/remove-threat.sh"
 
     # Download the remove-threat.sh script
-    sudo curl -o $removeThreatPath $removeThreatUrl
+    sudo curl -O $removeThreatPath $removeThreatUrl
 
     sudo chmod 750 $removeThreatPath
     sudo chown root:wazuh $removeThreatPath
