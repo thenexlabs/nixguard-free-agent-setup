@@ -117,7 +117,9 @@ configure_ossec_conf() {
         "<ignore>${HOME}/.cache</ignore>"
         "<ignore>${HOME}/.config</ignore>"
         "<ignore>${HOME}/.local</ignore>"
-        "<ignore>/home/.*</ignore>"
+        "<ignore>${HOME}/.xsession-errors</ignore>"
+        "<ignore>/root/.wget-hsts</ignore>"
+        "<ignore>/root/.rpmdb</ignore>"
     )
 
     # Excluding the /tmp directory as it typically contains many transient files
