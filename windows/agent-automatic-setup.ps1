@@ -1,6 +1,7 @@
 param (
   [string]$agentName,
-  [string]$ipAddress
+  [string]$ipAddress,
+  [string]$groupLabel
 )
 
 # Check if the system is 64-bit or 32-bit
@@ -59,7 +60,7 @@ $retryCount = 0
 do {
     # Download the Wazuh agent installer
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_AGENT_GROUP='default'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_AGENT_GROUP='$groupLabel'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
