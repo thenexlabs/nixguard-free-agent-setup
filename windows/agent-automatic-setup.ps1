@@ -54,6 +54,12 @@ while ($fileExists) {
 $maxRetries = 4
 $retryCount = 0
 
+param (
+  [string]$agentName,
+  [string]$ipAddress,
+  [string]$groupLabel
+)
+
 # Local variables
 $WAZUH_MANAGER = $ipAddress
 $WAZUH_AGENT_NAME = $agentName
@@ -64,10 +70,14 @@ Write-Host "Private cloud SOC IP: $WAZUH_MANAGER"
 Write-Host "Agent name: $WAZUH_AGENT_NAME"
 Write-Host "Agent group: $WAZUH_AGENT_GROUP"
 
+# Installation command
+# $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent.msi", "/q", "WAZUH_MANAGER='$WAZUH_MANAGER'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$WAZUH_AGENT_NAME'", "WAZUH_REGISTRATION_SERVER='$WAZUH_MANAGER'" -PassThru -Wait
+
+
 do {
     # Download the Wazuh agent installer
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent.msi", "/q", "WAZUH_MANAGER='$WAZUH_MANAGER'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$WAZUH_AGENT_NAME'", "WAZUH_REGISTRATION_SERVER='$WAZUH_MANAGER'" -PassThru -Wait
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_GROUP='$groupLabel'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
