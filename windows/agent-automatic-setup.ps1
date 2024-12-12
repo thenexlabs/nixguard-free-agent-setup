@@ -121,8 +121,6 @@ $enrollmentSection = @"
 </enrollment>
 "@
 
-# Write-Host "enrollment sec: $enrollmentSection"
-
 # Read the ossec.conf file
 $content = Get-Content -Path $configPath -Raw
 
@@ -130,6 +128,12 @@ $content = Get-Content -Path $configPath -Raw
 if ($content -notmatch '<enrollment>') {
     # Add the enrollment section to the ossec.conf file
     $content = $content -replace '(?s)(<client>.*?)(</client>)', "`$1`n$enrollmentSection`n`$2"
+}
+
+# Ensure the group section exists
+if ($content -notmatch '<group>') {
+    $groupSection = "<group>${groupLabel}</group>"
+    $content = $content -replace '</client>', "$groupSection`n</client>"
 }
 
 # Write the modified content back to the ossec.conf
