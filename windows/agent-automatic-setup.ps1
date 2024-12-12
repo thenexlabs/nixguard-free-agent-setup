@@ -60,8 +60,8 @@ $retryCount = 0
 do {
     # Download the Wazuh agent installer
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_GROUP='$groupLabel'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
-
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent.msi", "/q", "/lv* install.log", "WAZUH_MANAGER=$ipAddress", "WAZUH_AGENT_GROUP=$groupLabel", "WAZUH_AGENT_NAME=$agentName", "WAZUH_REGISTRATION_SERVER=$ipAddress" -PassThru -Wait
+    
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
         Write-Host "Installer exited with code $($wazuhInstaller.ExitCode)"
