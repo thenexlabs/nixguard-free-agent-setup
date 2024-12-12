@@ -54,12 +54,6 @@ while ($fileExists) {
 $maxRetries = 4
 $retryCount = 0
 
-param (
-  [string]$agentName,
-  [string]$ipAddress,
-  [string]$groupLabel
-)
-
 # Local variables
 $WAZUH_MANAGER = $ipAddress
 $WAZUH_AGENT_NAME = $agentName
