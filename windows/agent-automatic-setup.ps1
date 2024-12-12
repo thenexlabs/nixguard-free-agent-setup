@@ -131,9 +131,9 @@ if ($content -notmatch '<enrollment>') {
 }
 
 # Ensure the group section exists
-if ($content -notmatch '<group>') {
-    $groupSection = "<group>${groupLabel}</group>"
-    $content = $content -replace '</client>', "$groupSection`n</client>"
+if ($content -notmatch '<groups>') {
+    $groupSection = "<groups>${groupLabel}</groups>"
+    $content = $content -replace '</enrollment>', "$groupSection`n</enrollment>"
 }
 
 # Write the modified content back to the ossec.conf
