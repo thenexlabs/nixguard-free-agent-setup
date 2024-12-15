@@ -1,9 +1,9 @@
 #!/bin/bash
-# ./scriptname.sh "your_manager_ip" "your_agent_name"
+# ./scriptname.sh "your_manager_ip" "your_agent_name" "group_label"
 
-# Check if two arguments are passed
-if [ "$#" -ne 2 ]; then
-    echo "Usage: ./scriptname.sh <manager_ip> <agent_name>"
+# Check if three arguments are passed
+if [ "$#" -ne 3 ]; then
+    echo "Usage: ./scriptname.sh <manager_ip> <agent_name> <group_label>"
     exit 1
 fi
 
@@ -173,7 +173,7 @@ add_ignore_directories() {
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
     local WAZUH_AGENT_NAME="$AGENT_NAME"
-    local WAZUH_AGENT_GROUP="default"  # Adding the missing agent group
+    local WAZUH_AGENT_GROUP="$GROUP_LABEL"
 
     echo "Private cloud SOC IP: $WAZUH_MANAGER"
     echo "Agent name: $WAZUH_AGENT_NAME"
@@ -280,10 +280,10 @@ install_wazuh_agent() {
     elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
         if [ "$arch" == "amd64" ]; then
             sudo wget -O wazuh-agent_nixguard.x86_64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.x86_64.rpm
-            sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" rpm -ihv wazuh-agent_nixguard.x86_64.rpm
+            sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" WAZUH_AGENT_GROUP="$WAZUH_AGENT_GROUP" rpm -ihv wazuh-agent_nixguard.x86_64.rpm
         elif [ "$arch" == "aarch64" ]; then
             sudo wget -O wazuh-agent_nixguard.aarch64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.aarch64.rpm
-            sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" rpm -ihv wazuh-agent_nixguard.aarch64.rpm
+            sudo WAZUH_MANAGER="$WAZUH_MANAGER" WAZUH_AGENT_NAME="$WAZUH_AGENT_NAME" WAZUH_AGENT_GROUP="$WAZUH_AGENT_GROUP" rpm -ihv wazuh-agent_nixguard.aarch64.rpm
         fi
     else
         echo "Unsupported distribution: $distro"
