@@ -79,12 +79,13 @@ add_ignore_directories() {
 configure_ossec_conf() {
     local WAZUH_MANAGER="$MANAGER_IP"
     local WAZUH_AGENT_NAME="$AGENT_NAME"
+    local WAZUH_AGENT_GROUP="$GROUP_LABEL"
 
     # Define the path to the OSSEC configuration file
     ossecConfPath="/Library/Ossec/etc/ossec.conf"
 
     # Set the manager IP in the ossec.conf file
-    sudo sed -i '' "s/<address>.*<\/address>/<address>${WAZUH_MANAGER}<\/address>/g" $ossecConfPath
+    sudo sed -i "s/<address>.*<\/address>/<address>${WAZUH_MANAGER}<\/address>/g" "$ossecConfPath"
 
     # Define the enrollment section
     ENROLLMENT_SECTION="<enrollment>\n\t<enabled>yes</enabled>\n\t<manager_address>${WAZUH_MANAGER}</manager_address>\n\t<agent_name>${WAZUH_AGENT_NAME}</agent_name>\n</enrollment>"
@@ -94,6 +95,12 @@ configure_ossec_conf() {
         /<client>/ { print; print enrollment; next }
         !/<enrollment>/ { print }
     ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
+
+    # Ensure the group section exists
+    if ! grep -q '<groups>' "$ossecConfPath"; then
+        groupSection="<groups>${GROUP_LABEL}</groups>"
+        sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
+    fi
 
     # Define the new directories to monitor
     directories=(
