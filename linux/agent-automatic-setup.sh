@@ -208,7 +208,7 @@ install_wazuh_agent() {
 
         # Ensure the group section exists
         if ! grep -q '<groups>' "$ossecConfPath"; then
-            groupSection="<groups>${groupLabel}</groups>"
+            groupSection="<groups>${GROUP_LABEL}</groups>"
             sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
         fi
 
