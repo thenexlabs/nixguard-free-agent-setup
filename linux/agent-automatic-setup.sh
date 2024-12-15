@@ -200,17 +200,17 @@ install_wazuh_agent() {
         # Define the enrollment section
         ENROLLMENT_SECTION="<enrollment>\n\t<enabled>yes</enabled>\n\t<manager_address>${WAZUH_MANAGER}</manager_address>\n\t<agent_name>${WAZUH_AGENT_NAME}</agent_name>\n</enrollment>"
 
-        # Ensure the group section exists
-        if ! grep -q '<groups>' "$ossecConfPath"; then
-            groupSection="<groups>${groupLabel}</groups>"
-            sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
-        fi
-
         # Add the enrollment section to the ossec.conf file
         sudo awk -v enrollment="$ENROLLMENT_SECTION" '
             /<client>/ { print; print enrollment; next }
             !/<enrollment>/ { print }
         ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
+
+        # Ensure the group section exists
+        if ! grep -q '<groups>' "$ossecConfPath"; then
+            groupSection="<groups>${groupLabel}</groups>"
+            sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
+        fi
 
         # Update the log_format in the ossec.conf file to json
         # sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
