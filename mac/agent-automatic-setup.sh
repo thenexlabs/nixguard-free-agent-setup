@@ -1,16 +1,16 @@
 #!/bin/bash
-# ./mac_setup.sh "your_manager_ip" "your_agent_name"
+# ./scriptname.sh "your_manager_ip" "your_agent_name" "group_label"
 
-# Check if two arguments are passed
-if [ "$#" -ne 2 ]; then
-    echo "Usage: ./mac_setup.sh <manager_ip> <agent_name>"
+# Check if three arguments are passed
+if [ "$#" -ne 3 ]; then
+    echo "Usage: ./scriptname.sh <manager_ip> <agent_name> <group_label>"
     exit 1
 fi
 
 # Define the manager IP and agent name from command-line arguments
 MANAGER_IP=$1
 AGENT_NAME=$2
-GROUP_LABEL="default"
+GROUP_LABEL=$3
 
 # Function to uninstall Wazuh agent on macOS
 uninstall_wazuh_agent() {
@@ -140,10 +140,11 @@ configure_ossec_conf() {
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
     local WAZUH_AGENT_NAME="$AGENT_NAME"
+    local WAZUH_AGENT_GROUP="$GROUP_LABEL"
 
     echo "Private cloud SOC IP: $WAZUH_MANAGER"
     echo "Agent name: $WAZUH_AGENT_NAME"
-    echo "Agent group: $GROUP_LABEL"
+    echo "Agent group: $WAZUH_AGENT_GROUP"
 
     arch=$(uname -m)
     if ! command -v wget &> /dev/null; then
