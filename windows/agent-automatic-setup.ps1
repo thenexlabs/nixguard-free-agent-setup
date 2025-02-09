@@ -1,6 +1,7 @@
 param (
   [string]$agentName,
-  [string]$ipAddress
+  [string]$ipAddress,
+  [string]$groupLabel
 )
 
 # Check if the system is 64-bit or 32-bit
@@ -53,13 +54,24 @@ while ($fileExists) {
 $maxRetries = 4
 $retryCount = 0
 
-# Write-Host "agent name: $agentName"
-# Write-Host "cloud soc ip: $ipAddress"
+# Local variables
+$WAZUH_MANAGER = $ipAddress
+$WAZUH_AGENT_NAME = $agentName
+$WAZUH_AGENT_GROUP = $groupLabel
+
+# Print statements to check variables
+Write-Host "Private cloud SOC IP: $WAZUH_MANAGER"
+Write-Host "Agent name: $WAZUH_AGENT_NAME"
+Write-Host "Agent group: $WAZUH_AGENT_GROUP"
+
+# Installation command
+# $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent.msi", "/q", "WAZUH_MANAGER='$WAZUH_MANAGER'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$WAZUH_AGENT_NAME'", "WAZUH_REGISTRATION_SERVER='$WAZUH_MANAGER'" -PassThru -Wait
+
 
 do {
     # Download the Wazuh agent installer
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_AGENT_GROUP='default'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
@@ -109,8 +121,6 @@ $enrollmentSection = @"
 </enrollment>
 "@
 
-# Write-Host "enrollment sec: $enrollmentSection"
-
 # Read the ossec.conf file
 $content = Get-Content -Path $configPath -Raw
 
@@ -118,6 +128,12 @@ $content = Get-Content -Path $configPath -Raw
 if ($content -notmatch '<enrollment>') {
     # Add the enrollment section to the ossec.conf file
     $content = $content -replace '(?s)(<client>.*?)(</client>)', "`$1`n$enrollmentSection`n`$2"
+}
+
+# Ensure the group section exists
+if ($content -notmatch '<groups>') {
+    $groupSection = "<groups>${groupLabel}</groups>"
+    $content = $content -replace '</enrollment>', "$groupSection`n</enrollment>"
 }
 
 # Write the modified content back to the ossec.conf
