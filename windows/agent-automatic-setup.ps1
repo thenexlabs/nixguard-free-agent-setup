@@ -107,14 +107,49 @@ Set-Content -Path $configPath -Value $config
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-API_URL="https://api.thenex.world/get-user"
-JSON_PAYLOAD=$(echo -n '{"groupLabel":"' ; echo -n $groupLabel ; echo -n '"}')
-echo "$JSON_PAYLOAD"
-response=$(curl -X POST -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "$API_URL")
+# Define the API URL
+$API_URL = "https://api.thenex.world/get-user"
 
-# Extract the userEmail using grep, awk, sed, and cut
-token=$(echo "$response" | grep -o '"token": *"[^"]*"' | awk -F'"' '{print $4}')
-decode_jwt "$token"
+# Create the JSON payload
+$JSON_PAYLOAD = @{
+    groupLabel = $groupLabel
+} | ConvertTo-Json -Depth 10
+
+# Display the JSON payload for debugging
+Write-Output $JSON_PAYLOAD
+
+# Send the POST request and capture the response
+$response = Invoke-RestMethod -Uri $API_URL -Method Post -Body $JSON_PAYLOAD -ContentType "application/json"
+
+# Extract the "token" field from the JSON response
+$token = $response.token
+
+# Output the extracted token for debugging
+Write-Output "Token: $token"
+
+# Decode the JWT token (using a custom function or an external library if necessary)
+Function Decode-JWT {
+    param (
+        [string]$jwtToken
+    )
+
+    # Split the token into its three parts (header, payload, signature)
+    $tokenParts = $jwtToken -split '\.'
+
+    if ($tokenParts.Length -ge 2) {
+        # Decode the payload (Base64URL decoding required)
+        $payload = $tokenParts[1] + "==="
+        $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload.Replace("-", "+").Replace("_", "/")))
+
+        # Output the decoded payload
+        Write-Output "Decoded Payload: $decodedPayload"
+    } else {
+        Write-Error "Invalid JWT token format."
+    }
+}
+
+# Decode the extracted token
+Decode-JWT -jwtToken $token
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
