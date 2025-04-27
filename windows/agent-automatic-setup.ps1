@@ -54,24 +54,17 @@ while ($fileExists) {
 $maxRetries = 4
 $retryCount = 0
 
-# Local variables
-$WAZUH_MANAGER = $ipAddress
-$WAZUH_AGENT_NAME = $agentName
-$WAZUH_AGENT_GROUP = $groupLabel
-
 # Print statements to check variables
-Write-Host "Private cloud SOC IP: $WAZUH_MANAGER"
-Write-Host "Agent name: $WAZUH_AGENT_NAME"
-Write-Host "Agent group: $WAZUH_AGENT_GROUP"
+Write-Host "Private cloud SOC IP: $ipAddress"
+Write-Host "Agent name: $agentName"
+Write-Host "Agent group: $groupLabel"
 
 # Installation command
-# $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent.msi", "/q", "WAZUH_MANAGER='$WAZUH_MANAGER'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$WAZUH_AGENT_NAME'", "WAZUH_REGISTRATION_SERVER='$WAZUH_MANAGER'" -PassThru -Wait
-
 
 do {
     # Download the Wazuh agent installer
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
-    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_GROUP='$WAZUH_AGENT_GROUP'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
+    $wazuhInstaller = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "${env:tmp}\wazuh-agent", "/q", "WAZUH_MANAGER='$ipAddress'", "WAZUH_AGENT_GROUP='$groupLabel'", "WAZUH_AGENT_NAME='$agentName'", "WAZUH_REGISTRATION_SERVER='$ipAddress'" -PassThru -Wait
 
     # Check the exit code of the installer
     if ($wazuhInstaller.ExitCode -ne 0) {
@@ -111,6 +104,19 @@ while (-not $fileExists) {
 $config = Get-Content -Path $configPath
 $config = $config -replace '<address>0.0.0.0</address>', "<address>$ipAddress</address>"
 Set-Content -Path $configPath -Value $config
+
+# //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+API_URL="https://api.thenex.world/get-user"
+JSON_PAYLOAD=$(echo -n '{"groupLabel":"' ; echo -n $groupLabel ; echo -n '"}')
+echo "$JSON_PAYLOAD"
+response=$(curl -X POST -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "$API_URL")
+
+# Extract the userEmail using grep, awk, sed, and cut
+token=$(echo "$response" | grep -o '"token": *"[^"]*"' | awk -F'"' '{print $4}')
+decode_jwt "$token"
+
+# //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # Define the enrollment section
 $enrollmentSection = @"
