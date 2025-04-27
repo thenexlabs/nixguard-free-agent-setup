@@ -54,11 +54,6 @@ while ($fileExists) {
 $maxRetries = 4
 $retryCount = 0
 
-# Print statements to check variables
-Write-Host "Private cloud SOC IP: $ipAddress"
-Write-Host "Agent name: $agentName"
-Write-Host "Agent group: $groupLabel"
-
 # Installation command
 
 do {
@@ -125,10 +120,7 @@ $response = Invoke-RestMethod -Uri $API_URL -Method Post -Body $JSON_PAYLOAD -Co
 # Extract the "token" field from the JSON response
 $token = $response.token
 
-# Output the extracted token for debugging
-Write-Output "Token: $token"
-
-# Decode the JWT token (using a custom function or an external library if necessary)
+# Decode the JWT token (using a custom function)
 Function Decode-JWT {
     param (
         [string]$jwtToken
@@ -138,18 +130,32 @@ Function Decode-JWT {
     $tokenParts = $jwtToken -split '\.'
 
     if ($tokenParts.Length -ge 2) {
-        # Decode the payload (Base64URL decoding required)
-        $payload = $tokenParts[1] + "==="
-        $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload.Replace("-", "+").Replace("_", "/")))
+        # Get the payload (second part of the JWT token)
+        $payload = $tokenParts[1]
 
-        # Output the decoded payload
-        Write-Output "Decoded Payload: $decodedPayload"
+        # Convert Base64 URL to standard Base64
+        $standardBase64Payload = $payload.Replace("-", "+").Replace("_", "/")
+        switch ($standardBase64Payload.Length % 4) {
+            1 { $standardBase64Payload += "===" }
+            2 { $standardBase64Payload += "==" }
+            3 { $standardBase64Payload += "=" }
+        }
+
+        try {
+            # Decode the payload using UTF8 encoding
+            $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($standardBase64Payload))
+
+            # Output the decoded payload
+            Write-Output "Decoded Payload: $decodedPayload"
+        } catch {
+            Write-Error "Failed to decode payload: $_"
+        }
     } else {
         Write-Error "Invalid JWT token format."
     }
 }
 
-# Decode the extracted token
+# Example: Decode the extracted token
 Decode-JWT -jwtToken $token
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
