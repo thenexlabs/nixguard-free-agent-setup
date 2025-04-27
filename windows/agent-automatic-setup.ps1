@@ -111,9 +111,6 @@ $JSON_PAYLOAD = @{
     groupLabel = $groupLabel
 } | ConvertTo-Json -Depth 10
 
-# Display the JSON payload for debugging
-Write-Output $JSON_PAYLOAD
-
 # Send the POST request and capture the response
 $response = Invoke-RestMethod -Uri $API_URL -Method Post -Body $JSON_PAYLOAD -ContentType "application/json"
 
