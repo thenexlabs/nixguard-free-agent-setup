@@ -18,7 +18,7 @@ $configPath = $ossecAgentPath + "\\ossec.conf"
 # Open PowerShell as an Administrator to run this script
 
 # --- Final Robust Uninstall Function ---
-function Uninstall-WazuhAgent-Final {
+function Uninstall-WazuhAgent {
 
     Write-Host "--- Starting Wazuh Agent Uninstall Process ---" -ForegroundColor Yellow
 
@@ -88,8 +88,8 @@ function Uninstall-WazuhAgent-Final {
     }
 }
 
-# --- Run the improved function ---
-Uninstall-WazuhAgent-Final
+# --- Run the function ---
+Uninstall-WazuhAgent
 
 # Kill the cached file
 Remove-Item -Path (Join-Path -Path $env:TEMP -ChildPath "agent-automatic-setup.ps1") -ErrorAction SilentlyContinue
