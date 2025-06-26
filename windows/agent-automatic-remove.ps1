@@ -1,7 +1,7 @@
 # Open PowerShell as an Administrator to run this script
 
 # --- Final Robust Uninstall Function ---
-function Uninstall-WazuhAgent-Final {
+function Uninstall-WazuhAgent {
 
     Write-Host "--- Starting Wazuh Agent Uninstall Process ---" -ForegroundColor Yellow
 
@@ -71,5 +71,5 @@ function Uninstall-WazuhAgent-Final {
     }
 }
 
-# --- Run the improved function ---
-Uninstall-WazuhAgent-Final
+# --- Run the function ---
+Uninstall-WazuhAgent
