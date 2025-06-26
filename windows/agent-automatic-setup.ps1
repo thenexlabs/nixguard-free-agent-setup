@@ -91,6 +91,9 @@ function Uninstall-WazuhAgent-Final {
 # --- Run the improved function ---
 Uninstall-WazuhAgent-Final
 
+# Kill the cached file
+Remove-Item -Path (Join-Path -Path $env:TEMP -ChildPath "agent-automatic-setup.ps1") -ErrorAction SilentlyContinue
+
 # --- UNCHANGED: Your pre-installation check loop is preserved ---
 # Install the Wazuh agent
 ## loop until file is gone
