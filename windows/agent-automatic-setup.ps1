@@ -379,6 +379,6 @@ Write-Host "Virus threat response configuration added successfully."
 Write-Host "NixGuard agent setup successfully."
 
 # Start Wazuh agent
-Start-Process -FilePath "NET" -ArgumentList "START WazuhSvc"
+NET START WazuhSvc
 
 Write-Host "NixGuard agent started successfully."
