@@ -91,51 +91,68 @@ function Uninstall-WazuhAgent-Final {
 # --- Run the improved function ---
 Uninstall-WazuhAgent-Final
 
-# Install the Wazuh agent
-# =========================================================================================
-# --- CORRECTED WAZUH AGENT INSTALLATION ---
-# This entire block replaces the original installation loops and manual config edits.
-# =========================================================================================
+Write-Host "--- Starting DIAGNOSTIC Wazuh Agent Installation ---" -ForegroundColor Yellow
 
-Write-Host "--- Starting New Wazuh Agent Installation ---" -ForegroundColor Yellow
+# --- DIAGNOSTIC STEP 1: Log the Execution Context ---
+Write-Host "Running as user: $(whoami)"
+Write-Host "On host: $env:COMPUTERNAME"
 
-# FIX 1: Use the exact version and temp file name from the working dashboard command.
-# This ensures consistency with a known-good state.
+# --- DIAGNOSTIC STEP 2: Explicitly Set Security Protocol ---
+# This is the most likely culprit. Non-interactive sessions can default to older,
+# insecure protocols that the Wazuh manager's API will reject. This forces TLS 1.2.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Write-Host "Successfully set security protocol to TLS 1.2."
+}
+catch {
+    Write-Warning "Could not set TLS 1.2 protocol. This may be the cause of the failure."
+}
+
+# Define installer specifics
 $wazuhVersion = "4.9.2-1" 
 $installerUrl = "https://packages.wazuh.com/4.x/windows/wazuh-agent-$($wazuhVersion).msi"
-$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent" # No .msi extension, as per your working command
+$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent-diag.msi" # Use a unique name for diagnostics
 
 try {
-    # Download the installer (this part is similar to before)
+    # Download the installer
     Write-Host "Downloading installer..."
     Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
 
-    # FIX 2 (The Core Solution): Build the command as a single string.
-    # The previous -ArgumentList array was being mis-parsed by PowerShell, breaking the
-    # PROPERTY=Value pairs for msiexec. This string format is exactly what the
-    # command line expects and is guaranteed to be interpreted correctly.
+    # Build the command as a single string
     $msiCommand = "msiexec.exe /i `"$installerPath`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
     
-    Write-Host "Executing installation command: $msiCommand"
+    # --- DIAGNOSTIC STEP 3: Log the exact command before running ---
+    Write-Host "------------------------------------------------------------------"
+    Write-Host "EXECUTING THE FOLLOWING COMMAND:"
+    Write-Host $msiCommand
+    Write-Host "------------------------------------------------------------------"
     
-    # FIX 3: Execute the command string via cmd.exe for robust parsing.
-    # Using "cmd.exe /c" is a reliable way to run a complex command string with spaces and quotes.
-    # The -Wait and -PassThru flags ensure the script pauses and we get the exit code.
-    $process = Start-Process cmd.exe -ArgumentList "/c $msiCommand" -Wait -PassThru
+    # Execute the command and wait for it to finish
+    # We use Invoke-Expression here as a different method to see if it changes the outcome.
+    # It executes the string directly in the current PowerShell scope.
+    Invoke-Expression -Command $msiCommand
+    
+    # A brief pause to ensure the service has a moment to settle before we check it.
+    Start-Sleep -Seconds 5
 
-    # CRITICAL CHECK: If installation fails, stop the entire script.
-    # This prevents the custom logic from running on a broken installation.
-    if ($process.ExitCode -ne 0) {
-        Write-Error "CRITICAL: Wazuh Agent installation FAILED with exit code: $($process.ExitCode). Aborting script."
-        throw "Installation failed." # This stops execution and jumps to the finally block
+    # Check the agent's key file. This is the ultimate proof of registration.
+    $keyFile = "C:\Program Files (x86)\ossec-agent\client.keys"
+    if (Test-Path $keyFile -PathType Leaf) {
+        $keyContent = Get-Content $keyFile
+        if ($keyContent.Length -gt 0) {
+            Write-Host "SUCCESS: Agent key file found and is NOT empty. Registration was successful." -ForegroundColor Green
+        } else {
+            Write-Error "CRITICAL FAILURE: Agent key file was created but is EMPTY. Registration failed silently."
+            exit 1
+        }
+    } else {
+        Write-Error "CRITICAL FAILURE: Agent key file was NOT created. Registration failed."
+        exit 1
     }
-
-    Write-Host "SUCCESS: Wazuh Agent base installation and registration complete." -ForegroundColor Green
 }
 catch {
-    # This will catch the 'throw' command or any other script-breaking error.
-    Write-Error "Halting script due to installation failure."
-    exit 1 # Exit the entire script with a failure code
+    Write-Error "A script error occurred during installation: $($_.Exception.Message)"
+    exit 1
 }
 finally {
     # Always clean up the downloaded installer file.
@@ -364,6 +381,6 @@ Write-Host "Virus threat response configuration added successfully."
 Write-Host "NixGuard agent setup successfully."
 
 # Start Wazuh agent
-Start-Process -FilePath "NET" -ArgumentList "START WazuhSvc"
+NET START WazuhSvc
 
 Write-Host "NixGuard agent started successfully."
