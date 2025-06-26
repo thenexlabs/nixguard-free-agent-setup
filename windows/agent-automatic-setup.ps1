@@ -103,8 +103,8 @@ Set-Content -Path $configPath -Value $config
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # Define the API URL
-$API_URL = "http://localhost:9000/.netlify/functions/get-user"
-# "https://api.thenex.world/get-user"
+$API_URL = "https://api.thenex.world/get-user"
+# "http://localhost:9000/.netlify/functions/get-user"
 
 # Create the JSON payload
 $JSON_PAYLOAD = @{
