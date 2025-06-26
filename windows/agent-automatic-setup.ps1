@@ -91,67 +91,50 @@ function Uninstall-WazuhAgent-Final {
 # --- Run the improved function ---
 Uninstall-WazuhAgent-Final
 
-Write-Host "--- Starting DIAGNOSTIC Wazuh Agent Installation ---" -ForegroundColor Yellow
+# =========================================================================================
+# --- CORRECTED WAZUH AGENT INSTALLATION (Execution Context Fix) ---
+# This version launches a new, clean PowerShell process to run the installer,
+# precisely mimicking a manual command-line execution to bypass the scripted context block.
+# =========================================================================================
 
-# --- DIAGNOSTIC STEP 1: Log the Execution Context ---
-Write-Host "Running as user: $(whoami)"
-Write-Host "On host: $env:COMPUTERNAME"
+Write-Host "--- Starting New Wazuh Agent Installation ---" -ForegroundColor Yellow
 
-# --- DIAGNOSTIC STEP 2: Explicitly Set Security Protocol ---
-# This is the most likely culprit. Non-interactive sessions can default to older,
-# insecure protocols that the Wazuh manager's API will reject. This forces TLS 1.2.
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Write-Host "Successfully set security protocol to TLS 1.2."
-}
-catch {
-    Write-Warning "Could not set TLS 1.2 protocol. This may be the cause of the failure."
-}
-
-# Define installer specifics
-$wazuhVersion = "4.9.2-1" 
+# Define the installer specifics from the known-working command.
+$wazuhVersion = "4.9.2-1"
 $installerUrl = "https://packages.wazuh.com/4.x/windows/wazuh-agent-$($wazuhVersion).msi"
-$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent-diag.msi" # Use a unique name for diagnostics
+$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent.msi" # Use .msi for clarity
 
 try {
     # Download the installer
     Write-Host "Downloading installer..."
     Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
 
-    # Build the command as a single string
-    $msiCommand = "msiexec.exe /i `"$installerPath`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
-    
-    # --- DIAGNOSTIC STEP 3: Log the exact command before running ---
-    Write-Host "------------------------------------------------------------------"
-    Write-Host "EXECUTING THE FOLLOWING COMMAND:"
-    Write-Host $msiCommand
-    Write-Host "------------------------------------------------------------------"
-    
-    # Execute the command and wait for it to finish
-    # We use Invoke-Expression here as a different method to see if it changes the outcome.
-    # It executes the string directly in the current PowerShell scope.
-    Invoke-Expression -Command $msiCommand
-    
-    # A brief pause to ensure the service has a moment to settle before we check it.
-    Start-Sleep -Seconds 5
+    # This is the command that we know works when run manually.
+    $workingCommand = "msiexec.exe /i `"$installerPath`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
 
-    # Check the agent's key file. This is the ultimate proof of registration.
-    $keyFile = "C:\Program Files (x86)\ossec-agent\client.keys"
-    if (Test-Path $keyFile -PathType Leaf) {
-        $keyContent = Get-Content $keyFile
-        if ($keyContent.Length -gt 0) {
-            Write-Host "SUCCESS: Agent key file found and is NOT empty. Registration was successful." -ForegroundColor Green
-        } else {
-            Write-Error "CRITICAL FAILURE: Agent key file was created but is EMPTY. Registration failed silently."
-            exit 1
-        }
-    } else {
-        Write-Error "CRITICAL FAILURE: Agent key file was NOT created. Registration failed."
-        exit 1
+    # Construct the arguments to launch a new PowerShell process.
+    # This breaks out of the parent script's restricted context.
+    $powerShellArgs = @(
+        "-ExecutionPolicy", "Bypass",
+        "-NoProfile",
+        "-Command", $workingCommand
+    )
+
+    Write-Host "Executing installer in a new, clean PowerShell process to ensure proper registration..."
+    
+    # Launch the new process and wait for it to complete.
+    $process = Start-Process powershell.exe -ArgumentList $powerShellArgs -Wait -PassThru
+
+    # Check the exit code of the new PowerShell process.
+    if ($process.ExitCode -ne 0) {
+        Write-Error "CRITICAL: The installer process failed with exit code: $($process.ExitCode)."
+        throw "Installation process failed."
     }
+
+    Write-Host "Installation process completed."
 }
 catch {
-    Write-Error "A script error occurred during installation: $($_.Exception.Message)"
+    Write-Error "Halting script due to installation failure."
     exit 1
 }
 finally {
@@ -159,6 +142,18 @@ finally {
     if (Test-Path $installerPath) {
         Remove-Item -Path $installerPath -Force
     }
+}
+
+# --- Verification Step (This should now pass) ---
+Write-Host "--- Verifying Agent Registration ---" -ForegroundColor Yellow
+Start-Sleep -Seconds 5 
+
+$keyFile = "C:\Program Files (x86)\ossec-agent\client.keys"
+if ((Test-Path $keyFile) -and ((Get-Content $keyFile).Length -gt 0)) {
+    Write-Host "SUCCESS: Agent key file is present and not empty. Registration was successful." -ForegroundColor Green
+} else {
+    Write-Error "CRITICAL FAILURE: Agent registration failed. The client.keys file is missing or empty."
+    exit 1
 }
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
