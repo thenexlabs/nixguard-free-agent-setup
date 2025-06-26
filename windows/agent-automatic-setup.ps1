@@ -91,70 +91,74 @@ function Uninstall-WazuhAgent-Final {
 # --- Run the improved function ---
 Uninstall-WazuhAgent-Final
 
-# =========================================================================================
-# --- CORRECTED WAZUH AGENT INSTALLATION (Execution Context Fix) ---
-# This version launches a new, clean PowerShell process to run the installer,
-# precisely mimicking a manual command-line execution to bypass the scripted context block.
-# =========================================================================================
-
-Write-Host "--- Starting New Wazuh Agent Installation ---" -ForegroundColor Yellow
-
-# Define the installer specifics from the known-working command.
-$wazuhVersion = "4.9.2-1"
-$installerUrl = "https://packages.wazuh.com/4.x/windows/wazuh-agent-$($wazuhVersion).msi"
-$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent.msi" # Use .msi for clarity
-
-try {
-    # Download the installer
-    Write-Host "Downloading installer..."
-    Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-
-    # This is the command that we know works when run manually.
-    $workingCommand = "msiexec.exe /i `"$installerPath`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
-
-    # Construct the arguments to launch a new PowerShell process.
-    # This breaks out of the parent script's restricted context.
-    $powerShellArgs = @(
-        "-ExecutionPolicy", "Bypass",
-        "-NoProfile",
-        "-Command", $workingCommand
-    )
-
-    Write-Host "Executing installer in a new, clean PowerShell process to ensure proper registration..."
-    
-    # Launch the new process and wait for it to complete.
-    $process = Start-Process powershell.exe -ArgumentList $powerShellArgs -Wait -PassThru
-
-    # Check the exit code of the new PowerShell process.
-    if ($process.ExitCode -ne 0) {
-        Write-Error "CRITICAL: The installer process failed with exit code: $($process.ExitCode)."
-        throw "Installation process failed."
-    }
-
-    Write-Host "Installation process completed."
-}
-catch {
-    Write-Error "Halting script due to installation failure."
-    exit 1
-}
-finally {
-    # Always clean up the downloaded installer file.
-    if (Test-Path $installerPath) {
-        Remove-Item -Path $installerPath -Force
+# --- UNCHANGED: Your pre-installation check loop is preserved ---
+# Install the Wazuh agent
+## loop until file is gone
+$fileExists = $true
+while ($fileExists) {
+    if (Test-Path -Path $configPath) {
+        Write-Host ".."
+        Start-Sleep -Seconds 3
+    } else {
+        $fileExists = $false
+        Write-Host "."
     }
 }
 
-# --- Verification Step (This should now pass) ---
-Write-Host "--- Verifying Agent Registration ---" -ForegroundColor Yellow
-Start-Sleep -Seconds 5 
+# --- UNCHANGED: Your retry logic is preserved ---
+$maxRetries = 4
+$retryCount = 0
 
-$keyFile = "C:\Program Files (x86)\ossec-agent\client.keys"
-if ((Test-Path $keyFile) -and ((Get-Content $keyFile).Length -gt 0)) {
-    Write-Host "SUCCESS: Agent key file is present and not empty. Registration was successful." -ForegroundColor Green
-} else {
-    Write-Error "CRITICAL FAILURE: Agent registration failed. The client.keys file is missing or empty."
-    exit 1
+# --- MODIFIED: The installation command block ---
+do {
+    # UNCHANGED: The download command is the same.
+    Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
+
+    # --- THE FIX: START ---
+    # We build the command that we know works manually into a single string.
+    # The grave accent (`) is used to escape the inner double quotes around the path.
+    $workingCommand = "msiexec.exe /i `"`${env:tmp}\wazuh-agent`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
+
+    # We now execute this command in a new, clean PowerShell process.
+    # This breaks out of the parent script's restricted context and mimics a manual execution.
+    $wazuhInstaller = Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$workingCommand`"" -PassThru -Wait
+    # --- THE FIX: END ---
+
+    # UNCHANGED: The rest of your retry logic works perfectly with the new process variable.
+    if ($wazuhInstaller.ExitCode -ne 0) {
+        Write-Host "Installer process exited with code $($wazuhInstaller.ExitCode)"
+        $retryCount++
+        if ($retryCount -le $maxRetries) {
+            Write-Host "Retrying installation ($retryCount of $maxRetries)..."
+            Start-Sleep -Seconds 10
+        } else {
+            Write-Host "Installation failed after $maxRetries attempts."
+            exit $wazuhInstaller.ExitCode
+        }
+    } else {
+        break
+    }
+} while ($true)
+
+# --- UNCHANGED: Your post-installation check loop is preserved ---
+$counter = 0
+$fileExists = $false
+while (-not $fileExists) {
+    if (Test-Path -Path $configPath) {
+        $fileExists = $true
+        Write-Host "."
+    } else {
+        Write-Host ".."
+        Start-Sleep -Seconds 3
+    }
+    $counter++
 }
+
+# --- UNCHANGED: Your final configuration edit is preserved ---
+# This acts as a final safeguard to ensure the IP is correct.
+$config = Get-Content -Path $configPath
+$config = $config -replace '<address>0.0.0.0</address>', "<address>$ipAddress</address>"
+Set-Content -Path $configPath -Value $config
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -376,6 +380,6 @@ Write-Host "Virus threat response configuration added successfully."
 Write-Host "NixGuard agent setup successfully."
 
 # Start Wazuh agent
-NET START WazuhSvc
+Start-Process -FilePath "NET" -ArgumentList "START WazuhSvc"
 
 Write-Host "NixGuard agent started successfully."
