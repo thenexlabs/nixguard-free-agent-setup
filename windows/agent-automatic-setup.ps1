@@ -91,4 +91,296 @@ function Uninstall-WazuhAgent-Final {
 # --- Run the improved function ---
 Uninstall-WazuhAgent-Final
 
-Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.2-1.msi -OutFile $env:tmp\wazuh-agent; msiexec.exe /i $env:tmp\wazuh-agent /q WAZUH_MANAGER='49.12.238.208' WAZUH_AGENT_GROUP='6677db7db956205858b79595' WAZUH_AGENT_NAME='wazuh-test'
+Write-Host "--- Starting DIAGNOSTIC Wazuh Agent Installation ---" -ForegroundColor Yellow
+
+# --- DIAGNOSTIC STEP 1: Log the Execution Context ---
+Write-Host "Running as user: $(whoami)"
+Write-Host "On host: $env:COMPUTERNAME"
+
+# --- DIAGNOSTIC STEP 2: Explicitly Set Security Protocol ---
+# This is the most likely culprit. Non-interactive sessions can default to older,
+# insecure protocols that the Wazuh manager's API will reject. This forces TLS 1.2.
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Write-Host "Successfully set security protocol to TLS 1.2."
+}
+catch {
+    Write-Warning "Could not set TLS 1.2 protocol. This may be the cause of the failure."
+}
+
+# Define installer specifics
+$wazuhVersion = "4.9.2-1" 
+$installerUrl = "https://packages.wazuh.com/4.x/windows/wazuh-agent-$($wazuhVersion).msi"
+$installerPath = Join-Path -Path $env:TEMP -ChildPath "wazuh-agent-diag.msi" # Use a unique name for diagnostics
+
+try {
+    # Download the installer
+    Write-Host "Downloading installer..."
+    Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+
+    # Build the command as a single string
+    $msiCommand = "msiexec.exe /i `"$installerPath`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
+    
+    # --- DIAGNOSTIC STEP 3: Log the exact command before running ---
+    Write-Host "------------------------------------------------------------------"
+    Write-Host "EXECUTING THE FOLLOWING COMMAND:"
+    Write-Host $msiCommand
+    Write-Host "------------------------------------------------------------------"
+    
+    # Execute the command and wait for it to finish
+    # We use Invoke-Expression here as a different method to see if it changes the outcome.
+    # It executes the string directly in the current PowerShell scope.
+    Invoke-Expression -Command $msiCommand
+    
+    # A brief pause to ensure the service has a moment to settle before we check it.
+    Start-Sleep -Seconds 5
+
+    # Check the agent's key file. This is the ultimate proof of registration.
+    $keyFile = "C:\Program Files (x86)\ossec-agent\client.keys"
+    if (Test-Path $keyFile -PathType Leaf) {
+        $keyContent = Get-Content $keyFile
+        if ($keyContent.Length -gt 0) {
+            Write-Host "SUCCESS: Agent key file found and is NOT empty. Registration was successful." -ForegroundColor Green
+        } else {
+            Write-Error "CRITICAL FAILURE: Agent key file was created but is EMPTY. Registration failed silently."
+            exit 1
+        }
+    } else {
+        Write-Error "CRITICAL FAILURE: Agent key file was NOT created. Registration failed."
+        exit 1
+    }
+}
+catch {
+    Write-Error "A script error occurred during installation: $($_.Exception.Message)"
+    exit 1
+}
+finally {
+    # Always clean up the downloaded installer file.
+    if (Test-Path $installerPath) {
+        Remove-Item -Path $installerPath -Force
+    }
+}
+
+# //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+# Define the API URL
+$API_URL = "https://api.thenex.world/get-user"
+# "http://localhost:9000/.netlify/functions/get-user"
+
+# Create the JSON payload
+$JSON_PAYLOAD = @{
+    groupLabel = $groupLabel
+} | ConvertTo-Json -Depth 10
+
+# Send the POST request and capture the response
+$response = Invoke-RestMethod -Uri $API_URL -Method Post -Body $JSON_PAYLOAD -ContentType "application/json"
+
+# Extract the "token" field from the JSON response
+$token = $response.token
+
+Function Decode-JWT {
+    param (
+        [string]$jwtToken
+    )
+
+    # Split the token into its three parts (header, payload, signature)
+    $tokenParts = $jwtToken -split '\.'
+
+    if ($tokenParts.Length -ge 2) {
+        # Get the payload (second part of the JWT token)
+        $payload = $tokenParts[1]
+
+        # Convert Base64 URL to standard Base64
+        $standardBase64Payload = $payload.Replace("-", "+").Replace("_", "/")
+        switch ($standardBase64Payload.Length % 4) {
+            1 { $standardBase64Payload += "===" }
+            2 { $standardBase64Payload += "==" }
+            3 { $standardBase64Payload += "=" }
+        }
+
+        try {
+            # Decode the payload using UTF8 encoding
+            $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($standardBase64Payload))
+
+            # Parse the decoded payload JSON
+            $payloadData = $decodedPayload | ConvertFrom-Json
+
+            # Return the parsed object
+            return $payloadData
+        } catch {
+            Write-Error "Failed to decode payload: $_"
+        }
+    } else {
+        Write-Error "Invalid JWT token format."
+    }
+
+    # Return $null if the function fails
+    return $null
+}
+
+# Example: Decode the extracted token
+$decodedPayload = Decode-JWT -jwtToken $token
+
+# Print or handle the decoded payload outside the function
+if ($decodedPayload -ne $null) {
+    Write-Output "Decoded Payload: $decodedPayload"
+    
+    # Check if compliance standards require encryption
+    if (
+        $decodedPayload.complianceStandards -contains "SOC2" -or
+        $decodedPayload.complianceStandards -contains "NIST SP 800-53" -or
+        $decodedPayload.complianceStandards -contains "ISO 27001" -or
+        $decodedPayload.complianceStandards -contains "GDPR" -or
+        $decodedPayload.complianceStandards -contains "HIPAA" -or
+        $decodedPayload.complianceStandards -contains "PCI DSS" -or
+        $decodedPayload.complianceStandards -contains "PIPEDA" -or
+        $decodedPayload.complianceStandards -contains "CIS Controls"
+    ) {
+        Write-Output "Encryption required: encrypted"
+    } else {
+        Write-Output "No encryption required."
+    }
+} else {
+    Write-Output "Failed to decode the JWT token."
+}
+
+# //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+# Define the enrollment section
+$enrollmentSection = @"
+<enrollment>
+    <enabled>yes</enabled>
+    <manager_address>${ipAddress}</manager_address>
+    <agent_name>${agentName}</agent_name>
+</enrollment>
+"@
+
+# Read the ossec.conf file
+$content = Get-Content -Path $configPath -Raw
+
+# Check if the enrollment section already exists
+if ($content -notmatch '<enrollment>') {
+    # Add the enrollment section to the ossec.conf file
+    $content = $content -replace '(?s)(<client>.*?)(</client>)', "`$1`n$enrollmentSection`n`$2"
+}
+
+# Ensure the group section exists
+if ($content -notmatch '<groups>') {
+    $groupSection = "<groups>${groupLabel}</groups>"
+    $content = $content -replace '</enrollment>', "$groupSection`n</enrollment>"
+}
+
+# Write the modified content back to the ossec.conf
+$content | Set-Content -Path $configPath
+
+# File Integrity Monitoring Configuration
+$newDirectory = @"
+<directories check_all="yes" whodata="yes" realtime="yes">$env:USERPROFILE\Downloads</directories>
+"@
+[xml]$ossecConf = Get-Content -Path $configPath
+
+# Wait until the file is found
+while (-not $ossecConf) {
+    Start-Sleep -Seconds 1
+}
+
+$syscheckNode = $ossecConf.ossec_config.syscheck
+
+if (-not $syscheckNode) {
+    $syscheckNode = $ossecConf.CreateElement("syscheck")
+    $ossecConf.ossec_config.AppendChild($syscheckNode) | Out-Null
+}
+
+# Find the comment and add the new directory after it
+$commentNode = $ossecConf.ossec_config.syscheck.SelectSingleNode("comment()[contains(.,'<!-- Default files to be monitored. -->')]")
+if ($commentNode) {
+    $directories = @(
+        "$env:WINDIR\System32",  # Critical system files
+        "$env:ProgramFiles",  # Installed programs
+        "$env:ProgramFiles(x86)",  # 32-bit installed programs
+        "HKEY_LOCAL_MACHINE\SYSTEM",  # Registry settings
+        "$env:USERPROFILE",  # User profile
+        "$env:ProgramData",  # Program data
+        "$env:ProgramFiles\Common Files",  # Common program files
+        "$env:ProgramFiles(x86)\Common Files",  # 32-bit common program files
+        "$env:USERPROFILE\Downloads"  # User Downloads directory
+    )
+
+    foreach ($directory in $directories) {
+        $newDirectoryNode = $ossecConf.CreateElement("directories")
+        $newDirectoryNode.SetAttribute("check_all", "yes")
+        $newDirectoryNode.SetAttribute("whodata", "yes")
+        $newDirectoryNode.SetAttribute("realtime", "yes")
+        $newDirectoryNode.InnerText = $directory
+        $syscheckNode.InsertAfter($newDirectoryNode, $commentNode) | Out-Null
+    }
+} else {
+    $fragment = $ossecConf.CreateDocumentFragment()
+    $fragment.InnerXml = $newDirectory
+    $syscheckNode.AppendChild($fragment) | Out-Null
+}
+
+$ossecConf.Save($configPath)
+Write-Host "Directory monitoring configuration added successfully."
+
+###########################################################################################
+
+# Define the URL of the Python installer
+$pythonUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
+
+# Define the path to save the Python installer
+$pythonInstallerPath = Join-Path -Path $env:TEMP -ChildPath "python-installer.exe"
+
+# Download the Python installer
+Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstallerPath
+
+# Run the Python installer
+Start-Process -FilePath $pythonInstallerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
+
+# Start a new PowerShell session to install PyInstaller
+py -m pip install pyinstaller
+
+# Define the URL of the remove-threat.py script
+$removeThreatUrl = "https://github.com/thenexlabs/nixguard-agent-setup/raw/main/windows/remove-threat.py"
+
+# Define the path to save the remove-threat.py script
+$removeThreatPath = Join-Path -Path $env:TEMP -ChildPath "remove-threat.py"
+
+# Download the remove-threat.py script
+Invoke-WebRequest -Uri $removeThreatUrl -OutFile $removeThreatPath
+
+# Change the current location to the directory containing remove-threat.py
+Set-Location -Path $env:TEMP
+
+# Convert the remove-threat.py script to a Windows executable
+Invoke-Expression -Command "py -m PyInstaller -F $removeThreatPath"
+
+# Define the path of the executable file
+$exePath = Join-Path -Path $env:TEMP -ChildPath "dist\remove-threat.exe"
+
+# Define the destination directory
+$destDir = "C:\Program Files (x86)\ossec-agent\active-response\bin"
+
+# Move the executable file to the destination directory
+Move-Item -Path $exePath -Destination $destDir
+
+# Define the paths of the spec file and the dist and build directories
+$specPath = Join-Path -Path $env:TEMP -ChildPath "remove-threat.spec"
+$distDir = Join-Path -Path $env:TEMP -ChildPath "dist"
+$buildDir = Join-Path -Path $env:TEMP -ChildPath "build"
+
+# Delete the spec file and the dist and build directories
+Remove-Item -Path $specPath -ErrorAction SilentlyContinue
+Remove-Item -Path $distDir -Recurse -ErrorAction SilentlyContinue
+Remove-Item -Path $buildDir -Recurse -ErrorAction SilentlyContinue
+
+Write-Host "Virus threat response configuration added successfully."
+
+###########################################################################################
+
+Write-Host "NixGuard agent setup successfully."
+
+# Start Wazuh agent
+NET START WazuhSvc
+
+Write-Host "NixGuard agent started successfully."
