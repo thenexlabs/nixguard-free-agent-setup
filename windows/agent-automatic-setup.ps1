@@ -216,7 +216,7 @@ if ($decodedPayload -ne $null) {
     Write-Output $decodedPayload | Format-List
 
     Write-Output "Decoded complianceStandards:"
-    $decodedPayload.complianceStandards | ForEach-Object { Write-Output "- $_" }
+    $decodedPayload.cybersecurityPreferences.complianceStandards | ForEach-Object { Write-Output "- $_" }
 
     # Check if compliance standards require encryption
     $requiresEncryption = $false
@@ -233,8 +233,7 @@ if ($decodedPayload -ne $null) {
     )
 
     foreach ($standard in $requiredStandards) {
-        if ($decodedPayload.complianceStandards -contains $standard) {
-            $requiresEncryption = $true
+        if ($decodedPayload.cybersecurityPreferences.complianceStandards -contains $standard) {            $requiresEncryption = $true
             break
         }
     }
