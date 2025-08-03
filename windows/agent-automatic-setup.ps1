@@ -239,9 +239,95 @@ if ($decodedPayload -ne $null) {
     }
 
     if ($requiresEncryption) {
-        Write-Output "Encryption required: encrypted"
+        Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
+
+        # --- Define Paths and URL ---
+        $bitlockerScriptUrl = "https://github.com/thenexlabs/nixguard-free-agent-setup/raw/main/windows/scripts/bitlocker_check.ps1"
+        $wazuhAgentPath = "C:\Program Files (x86)\ossec-agent"
+        $destinationScriptPath = Join-Path $wazuhAgentPath "bitlocker_check.ps1"
+        
+        # --- 1. Download the PowerShell check script from GitHub to the endpoint ---
+        Write-Host "Downloading BitLocker check script from $bitlockerScriptUrl..."
+        try {
+            # Ensure the destination directory exists before downloading
+            if (-not (Test-Path $wazuhAgentPath)) {
+                New-Item -Path $wazuhAgentPath -ItemType Directory -Force | Out-Null
+            }
+            # Use TLS 1.2 for security and compatibility
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $bitlockerScriptUrl -OutFile $destinationScriptPath -UseBasicParsing
+            Write-Host "Successfully downloaded BitLocker check script to '$destinationScriptPath'."
+        }
+        catch {
+            Write-Error "CRITICAL: Failed to download the BitLocker script from GitHub. Error: $($_.Exception.Message)"
+            Write-Error "Please check network connectivity and firewall rules. Cannot proceed."
+            # Exit the script because the rest of the configuration is dependent on this file.
+            exit 1 
+        }
+
+        # --- 2. Modify ossec.conf using robust XML parsing ---
+        try {
+            Write-Host "Modifying '$configPath' for BitLocker monitoring..."
+            [xml]$ossecConf = Get-Content -Path $configPath
+
+            # A) Add the <localfile> command execution block if it doesn't exist
+            $existingLocalfile = $ossecConf.ossec_config.localfile | Where-Object { $_.alias -eq 'bitlocker-monitoring' }
+            if (-not $existingLocalfile) {
+                $localfileNode = $ossecConf.CreateElement('localfile')
+                
+                $logFormatNode = $ossecConf.CreateElement('log_format')
+                $logFormatNode.InnerText = 'json'
+                $localfileNode.AppendChild($logFormatNode) | Out-Null
+
+                $commandNode = $ossecConf.CreateElement('command')
+                # Use the destination path variable here
+                $commandNode.InnerText = "powershell.exe -ExecutionPolicy Bypass -File `"$destinationScriptPath`""
+                $localfileNode.AppendChild($commandNode) | Out-Null
+                
+                $frequencyNode = $ossecConf.CreateElement('frequency')
+                $frequencyNode.InnerText = '14400' # 4 hours
+                $localfileNode.AppendChild($frequencyNode) | Out-Null
+
+                $aliasNode = $ossecConf.CreateElement('alias')
+                $aliasNode.InnerText = 'bitlocker-monitoring'
+                $localfileNode.AppendChild($aliasNode) | Out-Null
+
+                $ossecConf.ossec_config.AppendChild($localfileNode) | Out-Null
+                Write-Host "Added '<localfile>' block for BitLocker monitoring."
+            } else {
+                Write-Host "BitLocker '<localfile>' block already exists. Skipping."
+            }
+
+            # B) Add File Integrity Monitoring (FIM) for the agent's own directory
+            $syscheckNode = $ossecConf.ossec_config.syscheck
+            if ($syscheckNode) {
+                $fimPath = "C:\Program Files (x86)\ossec-agent"
+                $existingFimDir = $syscheckNode.directories | Where-Object { $_.'#text' -eq $fimPath }
+                if (-not $existingFimDir) {
+                    $dirNode = $ossecConf.CreateElement('directories')
+                    $dirNode.SetAttribute('check_all', 'yes')
+                    $dirNode.SetAttribute('report_changes', 'yes')
+                    $dirNode.InnerText = $fimPath
+                    $syscheckNode.AppendChild($dirNode) | Out-Null
+                    Write-Host "Added FIM rule to monitor '$fimPath' for tampering."
+                } else {
+                    Write-Host "FIM rule for '$fimPath' already exists. Skipping."
+                }
+            } else {
+                Write-Warning "Could not find '<syscheck>' node in ossec.conf to add FIM rule."
+            }
+            
+            # --- 3. Save the modified configuration file ---
+            $ossecConf.Save($configPath)
+            Write-Host "Successfully saved updated configuration to '$configPath'."
+
+        }
+        catch {
+            Write-Error "An error occurred while modifying '$configPath'. Error: $($_.Exception.Message)"
+        }
+
     } else {
-        Write-Output "No encryption required."
+        Write-Host "Compliance standards do not require endpoint encryption. Skipping BitLocker configuration." -ForegroundColor Yellow
     }
 } else {
     Write-Output "Failed to decode the JWT token."
