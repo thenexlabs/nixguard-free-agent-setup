@@ -153,6 +153,7 @@ Set-Content -Path $configPath -Value $config
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 # Define the API URL
+# $API_URL = "https://api.thenex.world/get-user"
 $API_URL = "http://localhost:9000/.netlify/functions/get-user"
 
 # Create the JSON payload
@@ -211,7 +212,11 @@ $decodedPayload = Decode-JWT -jwtToken $token
 
 # Print or handle the decoded payload outside the function
 if ($decodedPayload -ne $null) {
-    Write-Output "Decoded Payload: $decodedPayload"
+    Write-Output "Decoded Payload:"
+    Write-Output $decodedPayload | Format-List
+
+    Write-Output "Decoded complianceStandards:"
+    $decodedPayload.complianceStandards | ForEach-Object { Write-Output "- $_" }
 
     # Check if compliance standards require encryption
     $requiresEncryption = $false
@@ -383,4 +388,3 @@ Write-Host "NixGuard agent setup successfully."
 Start-Process -FilePath "NET" -ArgumentList "START WazuhSvc"
 
 Write-Host "NixGuard agent started successfully."
-
