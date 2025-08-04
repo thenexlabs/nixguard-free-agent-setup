@@ -1,38 +1,24 @@
-# bitlocker_check.ps1 (DIAGNOSTIC VERSION)
-# This script's only purpose is to see what the WMI query returns when run as SYSTEM.
-
+# ====================================================================================
+# --- NEW SECTION: CREATE SCHEDULED TASK FOR BITLOCKER MONITORING (5-min interval for testing) ---
+# ====================================================================================
+Write-Host "Creating Scheduled Task for BitLocker monitoring..."
 try {
-    # Run the WMI query to find fixed drives (disks, not CD-ROMs, etc.)
-    $fixedDrives = Get-CimInstance -ClassName Win32_Volume -Filter "DriveType=3"
+    # Define the action: run the PowerShell script
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
 
-    # We will now create a detailed debug object
-    $debug_output = @{
-        "diagnostic_run" = @{
-            "timestamp" = (Get-Date -Format 'u');
-            "query" = "Get-CimInstance -ClassName Win32_Volume -Filter 'DriveType=3'";
-            "result_is_null" = ($null -eq $fixedDrives);
-            "result_count" = if ($null -ne $fixedDrives) { @($fixedDrives).Count } else { 0 };
-            "raw_result" = $fixedDrives | Select-Object *; # Select all properties
-        }
-    }
+    # Define the trigger: run every 5 minutes for testing, starting now
+    $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once -At (Get-Date)
+
+    # Define the principal: run as the SYSTEM account for highest reliability
+    $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount
+
+    # Register the task with the system
+    Register-ScheduledTask -TaskName "Wazuh-BitLocker-Check" -Action $action -Trigger $trigger -Principal $principal -Description "Periodically checks BitLocker status for Wazuh monitoring." -Force
+    
+    Write-Host "Successfully created 'Wazuh-BitLocker-Check' scheduled task to run every 5 minutes." -ForegroundColor Green
 }
 catch {
-    # If the WMI query itself fails, log that error
-    $debug_output = @{
-        "diagnostic_run" = @{
-            "timestamp" = (Get-Date -Format 'u');
-            "state" = "error";
-            "message" = "WMI query failed. Error: $($_.Exception.Message)"
-        }
-    }
+    Write-Error "CRITICAL: Failed to create the scheduled task. Error: $($_.Exception.Message)"
+    exit 1
 }
-
-# --- Write the debug output to the log file ---
-$logDir = "C:\ProgramData\Wazuh\logs"
-$logFile = Join-Path -Path $logDir -ChildPath "bitlocker_status.log"
-if (-not (Test-Path $logDir)) {
-    New-Item -Path $logDir -ItemType Directory -Force | Out-Null
-}
-# Use -Depth 3 to ensure we see all the nested properties
-$finalJson = ConvertTo-Json -InputObject $debug_output -Depth 3
-$finalJson | Out-File -FilePath $logFile -Encoding utf8
+# ====================================================================================
