@@ -327,7 +327,6 @@ if ($decodedPayload -ne $null) {
         catch {
             Write-Error "CRITICAL: Failed to download the BitLocker script from GitHub. Error: $($_.Exception.Message)"
             Write-Error "Please check network connectivity and firewall rules. Cannot proceed."
-            # Exit the script because the rest of the configuration is dependent on this file.
             exit 1 
         }
 
@@ -341,13 +340,15 @@ if ($decodedPayload -ne $null) {
             if (-not $existingLocalfile) {
                 $localfileNode = $ossecConf.CreateElement('localfile')
                 
-                $logFormatNode = $ossecConf.CreateElement('log_format')
-                $logFormatNode.InnerText = 'json'
-                $localfileNode.AppendChild($logFormatNode) | Out-Null
+                # --- FIX #1: The <log_format>json</log_format> tag is INTENTIONALLY OMITTED. ---
+                # This forces the agent to send the raw JSON output from the script,
+                # preventing the "double-wrapping" issue and allowing the built-in manager decoder to work.
 
                 $commandNode = $ossecConf.CreateElement('command')
-                # Use the destination path variable here
-                $commandNode.InnerText = "powershell.exe -ExecutionPolicy Bypass -File `"$destinationScriptPath`""
+                # --- FIX #2: Use a GPO-resistant command ---
+                # This method reads the script as text and executes it in memory,
+                # bypassing Group Policy Objects that block the execution of .ps1 files.
+                $commandNode.InnerText = "powershell.exe -ExecutionPolicy Bypass -NoProfile -Command `"`& {Get-Content '$destinationScriptPath' | Invoke-Expression}`""
                 $localfileNode.AppendChild($commandNode) | Out-Null
                 
                 $frequencyNode = $ossecConf.CreateElement('frequency')
@@ -359,7 +360,7 @@ if ($decodedPayload -ne $null) {
                 $localfileNode.AppendChild($aliasNode) | Out-Null
 
                 $ossecConf.ossec_config.AppendChild($localfileNode) | Out-Null
-                Write-Host "Added '<localfile>' block for BitLocker monitoring."
+                Write-Host "Added '<localfile>' block for BitLocker monitoring with GPO-resistant command."
             } else {
                 Write-Host "BitLocker '<localfile>' block already exists. Skipping."
             }
