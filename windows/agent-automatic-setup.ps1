@@ -263,25 +263,22 @@ if ($decodedPayload -ne $null) {
         }
 
         # ====================================================================================
-        # --- FINAL VERSION: CREATE A RELIABLE, REPEATING SCHEDULED TASK ---
+        # --- FINAL VERSION: CREATE A RELIABLE, REPEATING SCHEDULED TASK (CORRECTED SYNTAX) ---
         # ====================================================================================
         Write-Host "Creating a reliable, repeating Scheduled Task for BitLocker monitoring..."
         try {
             # Define the action: run the PowerShell script.
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
 
+            # --- THIS IS THE CORRECTED TRIGGER LOGIC ---
             # We create a trigger that starts in one minute and repeats every 5 minutes indefinitely.
-            # This is far more reliable than the '-Once' method.
-            $trigger = New-ScheduledTaskTrigger -Daily -At ( (Get-Date).AddMinutes(1) )
-            $trigger.Repetition.Interval = 'PT5M' # PT5M is the standard format for "Period of Time, 5 Minutes"
-            $trigger.Repetition.Duration = 'P1D' # This makes the repetition last for one day
-            $trigger.Repetition.StopIfGoingOnBatteries = $false
-            # By setting the duration to 1 day and the trigger to Daily, it effectively repeats forever.
+            # RepetitionInterval is a direct parameter of the cmdlet, not a sub-property.
+            $trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 5)
 
             # Define the principal: run as the SYSTEM account for highest reliability.
             $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-            # Define the settings for the task.
+            # Define the settings for the task to ensure it runs reliably.
             $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
             # Register the task with the system, replacing it if it already exists.
@@ -298,7 +295,7 @@ if ($decodedPayload -ne $null) {
             exit 1
         }
         # ====================================================================================
-
+        
         # Modify ossec.conf to monitor the log file created by the Scheduled Task ---
         try {
             Write-Host "Modifying '$configPath' to monitor the BitLocker status log file..."
