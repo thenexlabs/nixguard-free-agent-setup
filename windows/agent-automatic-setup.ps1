@@ -264,76 +264,41 @@ if ($decodedPayload -ne $null) {
             exit 1 
         }
 
-        # --- 2. Modify ossec.conf using robust XML parsing ---
+        # --- 2. Add the Wodle for Command Monitoring ---
         try {
-            Write-Host "Modifying '$configPath' for BitLocker monitoring..."
+            Write-Host "Modifying '$configPath' for BitLocker monitoring using the Command Wodle..."
             [xml]$ossecConf = Get-Content -Path $configPath
 
-            # A) Add the <localfile> command execution block if it doesn't exist
-            $existingLocalfile = $ossecConf.ossec_config.localfile | Where-Object { $_.alias -eq 'bitlocker-monitoring' }
-            if (-not $existingLocalfile) {
-                $localfileNode = $ossecConf.CreateElement('localfile')
-                
-                # --- THE FINAL, CORRECTED CONFIGURATION ---
-                # Add the <log_format> tag with the value 'command'.
-                $logFormatNode = $ossecConf.CreateElement('log_format')
-                $logFormatNode.InnerText = 'command'
-                $localfileNode.AppendChild($logFormatNode) | Out-Null
+            # A) Add the <wodle name="command"> block if it doesn't exist
+            $existingWodle = $ossecConf.ossec_config.wodle | Where-Object { $_.tag -eq 'bitlocker-monitoring' }
+            if (-not $existingWodle) {
+                # Create the main wodle element
+                $wodleNode = $ossecConf.CreateElement('wodle')
+                $wodleNode.SetAttribute('name', 'command')
 
-                # --- THE BULLETPROOF COMMAND METHOD (BASE64) ---
-                # This method is immune to all special characters, quotes, and escaping issues.
+                # Add child elements
+                $wodleNode.AppendChild($ossecConf.CreateElement('disabled')).InnerText = 'no'
+                $wodleNode.AppendChild($ossecConf.CreateElement('tag')).InnerText = 'bitlocker-monitoring'
                 
-                # 1. Read the raw content of the script file.
+                # --- Use the Bulletproof Base64 Command ---
                 $scriptContent = Get-Content -Path $destinationScriptPath -Raw
-                
-                # 2. Convert the script content to a Base64-encoded string.
                 $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContent))
+                $wodleNode.AppendChild($ossecConf.CreateElement('command')).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
                 
-                # 3. Use the -EncodedCommand parameter.
-                $commandNode = $ossecConf.CreateElement('command')
-                $commandNode.InnerText = "powershell.exe -EncodedCommand $encodedCommand"
-                $localfileNode.AppendChild($commandNode) | Out-Null
-                
-                # Add the frequency for how often the command runs
-                $frequencyNode = $ossecConf.CreateElement('frequency')
-                $frequencyNode.InnerText = '14400' # 4 hours
-                $localfileNode.AppendChild($frequencyNode) | Out-Null
+                $wodleNode.AppendChild($ossecConf.CreateElement('interval')).InnerText = '4h'
+                $wodleNode.AppendChild($ossecConf.CreateElement('run_on_start')).InnerText = 'yes'
+                $wodleNode.AppendChild($ossecConf.CreateElement('timeout')).InnerText = '60'
 
-                # Add the alias for easy identification
-                $aliasNode = $ossecConf.CreateElement('alias')
-                $aliasNode.InnerText = 'bitlocker-monitoring'
-                $localfileNode.AppendChild($aliasNode) | Out-Null
-
-                # Add the fully constructed <localfile> block to the main config
-                $ossecConf.ossec_config.AppendChild($localfileNode) | Out-Null
-                Write-Host "Added '<localfile>' block for BitLocker monitoring using robust Base64 encoding."
+                # Add the fully constructed wodle block to the main config
+                $ossecConf.ossec_config.AppendChild($wodleNode) | Out-Null
+                Write-Host "Added '<wodle name=`"command`">' block for BitLocker monitoring."
             } else {
-                Write-Host "BitLocker '<localfile>' block already exists. Skipping."
+                Write-Host "BitLocker command wodle block already exists. Skipping."
             }
 
-            # B) Add File Integrity Monitoring (FIM) for the agent's own directory
-            $syscheckNode = $ossecConf.ossec_config.syscheck
-            if ($syscheckNode) {
-                $fimPath = "C:\Program Files (x86)\ossec-agent"
-                $existingFimDir = $syscheckNode.directories | Where-Object { $_.'#text' -eq $fimPath }
-                if (-not $existingFimDir) {
-                    $dirNode = $ossecConf.CreateElement('directories')
-                    $dirNode.SetAttribute('check_all', 'yes')
-                    $dirNode.SetAttribute('report_changes', 'yes')
-                    $dirNode.InnerText = $fimPath
-                    $syscheckNode.AppendChild($dirNode) | Out-Null
-                    Write-Host "Added FIM rule to monitor '$fimPath' for tampering."
-                } else {
-                    Write-Host "FIM rule for '$fimPath' already exists. Skipping."
-                }
-            } else {
-                Write-Warning "Could not find '<syscheck>' node in ossec.conf to add FIM rule."
-            }
-            
             # --- 3. Save the modified configuration file ---
             $ossecConf.Save($configPath)
             Write-Host "Successfully saved updated configuration to '$configPath'."
-
         }
         catch {
             Write-Error "An error occurred while modifying '$configPath'. Error: $($_.Exception.Message)"
