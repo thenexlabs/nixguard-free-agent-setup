@@ -295,7 +295,7 @@ if ($decodedPayload -ne $null) {
             exit 1
         }
         # ====================================================================================
-        
+
         # Modify ossec.conf to monitor the log file created by the Scheduled Task ---
         try {
             Write-Host "Modifying '$configPath' to monitor the BitLocker status log file..."
