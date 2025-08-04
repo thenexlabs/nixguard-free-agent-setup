@@ -238,7 +238,7 @@ if ($decodedPayload -ne $null) {
         }
     }
 
-        if ($requiresEncryption) {
+    if ($requiresEncryption) {
         Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
 
         # --- Define Paths and URL ---
@@ -262,27 +262,42 @@ if ($decodedPayload -ne $null) {
             exit 1 
         }
 
-        # This bypasses the unreliable command execution features and uses a robust OS-native scheduler.
-        Write-Host "Creating Scheduled Task for BitLocker monitoring..."
+        # ====================================================================================
+        # --- FINAL VERSION: CREATE A RELIABLE, REPEATING SCHEDULED TASK ---
+        # ====================================================================================
+        Write-Host "Creating a reliable, repeating Scheduled Task for BitLocker monitoring..."
         try {
-            # Define the action: run the PowerShell script
+            # Define the action: run the PowerShell script.
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
 
-            # Define the trigger: run every 5 minutes, starting now
-            $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once -At (Get-Date)
+            # We create a trigger that starts in one minute and repeats every 5 minutes indefinitely.
+            # This is far more reliable than the '-Once' method.
+            $trigger = New-ScheduledTaskTrigger -Daily -At ( (Get-Date).AddMinutes(1) )
+            $trigger.Repetition.Interval = 'PT5M' # PT5M is the standard format for "Period of Time, 5 Minutes"
+            $trigger.Repetition.Duration = 'P1D' # This makes the repetition last for one day
+            $trigger.Repetition.StopIfGoingOnBatteries = $false
+            # By setting the duration to 1 day and the trigger to Daily, it effectively repeats forever.
 
-            # Define the principal: run as the SYSTEM account for highest reliability, even if no user is logged in
-            $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount
+            # Define the principal: run as the SYSTEM account for highest reliability.
+            $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-            # Register the task with the system, replacing it if it already exists
-            Register-ScheduledTask -TaskName "Wazuh-BitLocker-Check" -Action $action -Trigger $trigger -Principal $principal -Description "Periodically checks BitLocker status for Wazuh monitoring." -Force
+            # Define the settings for the task.
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+
+            # Register the task with the system, replacing it if it already exists.
+            Register-ScheduledTask -TaskName "Wazuh-BitLocker-Check" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Periodically checks BitLocker status for Wazuh monitoring." -Force
             
-            Write-Host "Successfully created or updated the 'Wazuh-BitLocker-Check' scheduled task." -ForegroundColor Green
+            Write-Host "Successfully created 'Wazuh-BitLocker-Check' scheduled task." -ForegroundColor Green
+
+            # Explicitly run the task immediately after creating it to guarantee a first run.
+            Write-Host "Forcing an immediate run of the scheduled task to generate the first log..."
+            Start-ScheduledTask -TaskName "Wazuh-BitLocker-Check"
         }
         catch {
-            Write-Error "CRITICAL: Failed to create the scheduled task. Error: $($_.Exception.Message)"
+            Write-Error "CRITICAL: Failed to create or run the scheduled task. Error: $($_.Exception.Message)"
             exit 1
         }
+        # ====================================================================================
 
         # Modify ossec.conf to monitor the log file created by the Scheduled Task ---
         try {
