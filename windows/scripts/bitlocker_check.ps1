@@ -6,13 +6,8 @@ try {
         throw "BitLocker PowerShell module is not available."
     }
     
-    # 1. Get all volumes classified as 'Fixed'.
     $allFixedVolumes = Get-CimInstance -ClassName Win32_Volume -Filter "DriveType=3"
-    
-    # 2. Create an empty list to hold ONLY the volumes that have a drive letter.
     $validDriveLetters = @()
-    
-    # 3. Loop through the results and filter out any partitions without a drive letter.
     if ($null -ne $allFixedVolumes) {
         foreach ($volume in $allFixedVolumes) {
             if (-not [string]::IsNullOrWhiteSpace($volume.DriveLetter)) {
@@ -21,15 +16,15 @@ try {
         }
     }
     
-    # 4. Check if we have any valid drives left to check.
     if ($validDriveLetters.Count -eq 0) {
         throw "Found fixed volumes, but none have an assigned drive letter to check for BitLocker status."
     }
 
-    # 5. Now, get the BitLocker status ONLY for the drives with valid letters.
     $bitlockerVolumes = Get-BitLockerVolume -MountPoint $validDriveLetters
     
-    if ($null -eq $bitlockerVolumes) {
+    # --- THIS IS THE FINAL CORRECTED LOGIC ---
+    # It now correctly identifies both a null result AND an empty result as a failure.
+    if ($null -eq $bitlockerVolumes -or $bitlockerVolumes.Count -eq 0) {
         $output = @{ "bitlocker_status" = @{ "state" = "error"; "message" = "No BitLocker-managed volumes found on fixed drives." } }
     } else {
         $volume_reports = @()
