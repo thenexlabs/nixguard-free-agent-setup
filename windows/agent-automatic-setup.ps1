@@ -238,7 +238,7 @@ if ($decodedPayload -ne $null) {
         }
     }
 
-    if ($requiresEncryption) {
+        if ($requiresEncryption) {
         Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
 
         # --- Define Paths and URL ---
@@ -246,7 +246,8 @@ if ($decodedPayload -ne $null) {
         $wazuhAgentPath = "C:\Program Files (x86)\ossec-agent"
         $destinationScriptPath = Join-Path $wazuhAgentPath "bitlocker_check.ps1"
         
-        # --- 1. Download the PowerShell check script from GitHub ---
+        # Download the PowerShell check script from GitHub ---
+        # This script now writes its output to a file instead of the console.
         Write-Host "Downloading BitLocker check script from $bitlockerScriptUrl..."
         try {
             if (-not (Test-Path $wazuhAgentPath)) {
@@ -261,78 +262,76 @@ if ($decodedPayload -ne $null) {
             exit 1 
         }
 
-        # --- 2. NEW: Enable Remote Command Execution for the Command Wodle (Required) ---
-        # This is the critical setting that allows the agent to run scheduled commands.
-        Write-Host "Enabling wazuh_command.remote_commands security option..."
+        # This bypasses the unreliable command execution features and uses a robust OS-native scheduler.
+        Write-Host "Creating Scheduled Task for BitLocker monitoring..."
         try {
-            $etcDir = "C:\Program Files (x86)\ossec-agent\etc"
-            $internalOptionsPath = Join-Path -Path $etcDir "local_internal_options.conf"
-            $setting = "wazuh_command.remote_commands=1"
+            # Define the action: run the PowerShell script
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
 
-            # Ensure the 'etc' directory exists before creating the file
-            if (-not (Test-Path $etcDir)) {
-                New-Item -Path $etcDir -ItemType Directory -Force | Out-Null
-            }
-            Set-Content -Path $internalOptionsPath -Value $setting
-            Write-Host "Successfully configured local_internal_options.conf for the Command Wodle." -ForegroundColor Green
+            # Define the trigger: run every 4 hours, starting now
+            $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Hours 4) -Once -At (Get-Date)
+
+            # Define the principal: run as the SYSTEM account for highest reliability, even if no user is logged in
+            $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount
+
+            # Register the task with the system, replacing it if it already exists
+            Register-ScheduledTask -TaskName "Wazuh-BitLocker-Check" -Action $action -Trigger $trigger -Principal $principal -Description "Periodically checks BitLocker status for Wazuh monitoring." -Force
+            
+            Write-Host "Successfully created or updated the 'Wazuh-BitLocker-Check' scheduled task." -ForegroundColor Green
         }
         catch {
-            Write-Error "CRITICAL: Failed to create or write to local_internal_options.conf. Error: $($_.Exception.Message)"
+            Write-Error "CRITICAL: Failed to create the scheduled task. Error: $($_.Exception.Message)"
             exit 1
         }
 
-        # --- 3. REVISED: Modify ossec.conf to use the Command Wodle ---
+        # Modify ossec.conf to monitor the log file created by the Scheduled Task ---
         try {
-            Write-Host "Modifying '$configPath' to use the modern Command Wodle for BitLocker monitoring..."
+            Write-Host "Modifying '$configPath' to monitor the BitLocker status log file..."
             [xml]$ossecConf = Get-Content -Path $configPath
 
-            # A) Add the <wodle name="command"> block if it doesn't exist
-            $existingWodle = $ossecConf.ossec_config.wodle | Where-Object { $_.tag -eq 'bitlocker-monitoring' }
-            if (-not $existingWodle) {
-                # Create the main wodle element
-                $wodleNode = $ossecConf.CreateElement('wodle')
-                $wodleNode.SetAttribute('name', 'command')
+            # A) Add the <localfile> block to monitor the output log
+            $logFileToMonitor = 'C:\ProgramData\Wazuh\logs\bitlocker_status.log'
+            $existingLocalfile = $ossecConf.ossec_config.localfile | Where-Object { $_.location -eq $logFileToMonitor }
+            if (-not $existingLocalfile) {
+                $localfileNode = $ossecConf.CreateElement('localfile')
 
-                # Add child elements for the wodle configuration
-                $wodleNode.AppendChild($ossecConf.CreateElement('disabled')).InnerText = 'no'
-                $wodleNode.AppendChild($ossecConf.CreateElement('tag')).InnerText = 'bitlocker-monitoring'
-                
-                # --- Use the Bulletproof Base64 Command Method ---
-                $scriptContent = Get-Content -Path $destinationScriptPath -Raw
-                $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContent))
-                $wodleNode.AppendChild($ossecConf.CreateElement('command')).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
-                
-                $wodleNode.AppendChild($ossecConf.CreateElement('interval')).InnerText = '4h'
-                $wodleNode.AppendChild($ossecConf.CreateElement('run_on_start')).InnerText = 'yes'
-                $wodleNode.AppendChild($ossecConf.CreateElement('timeout')).InnerText = '60'
+                # Tell Wazuh the location of the log file to watch
+                $localfileNode.AppendChild($ossecConf.CreateElement('location')).InnerText = $logFileToMonitor
 
-                # Add the fully constructed wodle block to the main config
-                $ossecConf.ossec_config.AppendChild($wodleNode) | Out-Null
-                Write-Host "Added '<wodle name=`"command`">' block for BitLocker monitoring."
+                # Tell Wazuh that every line in this file is a complete JSON object
+                $localfileNode.AppendChild($ossecConf.CreateElement('log_format')).InnerText = 'json'
+                
+                # Add the block to the configuration
+                $ossecConf.ossec_config.AppendChild($localfileNode) | Out-Null
+                Write-Host "Configured Wazuh to monitor the BitLocker status log file."
             } else {
-                Write-Host "BitLocker command wodle block already exists. Skipping."
+                Write-Host "BitLocker log file monitoring is already configured. Skipping."
             }
 
-            # B) Add File Integrity Monitoring (FIM) for the agent's own directory (Still a good practice)
+            # B) Add File Integrity Monitoring (FIM) for the agent's own script (Still a good practice)
             $syscheckNode = $ossecConf.ossec_config.syscheck
             if ($syscheckNode) {
-                $fimPath = "C:\Program Files (x86)\ossec-agent"
-                $existingFimDir = $syscheckNode.directories | Where-Object { $_.'#text' -eq $fimPath }
-                if (-not $existingFimDir) {
-                    $dirNode = $ossecConf.CreateElement('directories')
-                    $dirNode.SetAttribute('check_all', 'yes')
-                    $dirNode.SetAttribute('report_changes', 'yes')
-                    $dirNode.InnerText = $fimPath
-                    $syscheckNode.AppendChild($dirNode) | Out-Null
-                    Write-Host "Added FIM rule to monitor '$fimPath' for tampering."
-                } else {
-                    Write-Host "FIM rule for '$fimPath' already exists. Skipping."
+                # Monitor both the script itself and the log it produces for tampering
+                $pathsToMonitor = @(
+                    "C:\Program Files (x86)\ossec-agent",
+                    "C:\ProgramData\Wazuh\logs"
+                )
+                foreach ($fimPath in $pathsToMonitor) {
+                    $existingFimDir = $syscheckNode.directories | Where-Object { $_.'#text' -eq $fimPath }
+                    if (-not $existingFimDir) {
+                        $dirNode = $ossecConf.CreateElement('directories')
+                        $dirNode.SetAttribute('check_all', 'yes')
+                        $dirNode.SetAttribute('report_changes', 'yes')
+                        $dirNode.InnerText = $fimPath
+                        $syscheckNode.AppendChild($dirNode) | Out-Null
+                        Write-Host "Added FIM rule to monitor '$fimPath' for tampering."
+                    }
                 }
             } else {
                 Write-Warning "Could not find '<syscheck>' node in ossec.conf to add FIM rule."
             }
             
-            # --- 4. Save the final configuration file ---
+            # Save the final configuration file ---
             $ossecConf.Save($configPath)
             Write-Host "Successfully saved updated configuration to '$configPath'."
 
@@ -340,7 +339,6 @@ if ($decodedPayload -ne $null) {
         catch {
             Write-Error "An error occurred while modifying '$configPath'. Error: $($_.Exception.Message)"
         }
-
     } else {
         Write-Host "Compliance standards do not require endpoint encryption. Skipping BitLocker configuration." -ForegroundColor Yellow
     }
