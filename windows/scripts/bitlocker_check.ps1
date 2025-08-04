@@ -1,24 +1,42 @@
-# ====================================================================================
-# --- NEW SECTION: CREATE SCHEDULED TASK FOR BITLOCKER MONITORING (5-min interval for testing) ---
-# ====================================================================================
-Write-Host "Creating Scheduled Task for BitLocker monitoring..."
+# bitlocker_check.ps1 (DIAGNOSTIC VERSION)
+# This script's only purpose is to see what the WMI query returns when run as SYSTEM.
+
 try {
-    # Define the action: run the PowerShell script
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
+    # Run the WMI query to find fixed drives (physical disks, not CD-ROMs, etc.)
+    # DriveType=3 is the standard value for local, fixed disks.
+    $fixedDrives = Get-CimInstance -ClassName Win32_Volume -Filter "DriveType=3"
 
-    # Define the trigger: run every 5 minutes for testing, starting now
-    $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once -At (Get-Date)
-
-    # Define the principal: run as the SYSTEM account for highest reliability
-    $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount
-
-    # Register the task with the system
-    Register-ScheduledTask -TaskName "Wazuh-BitLocker-Check" -Action $action -Trigger $trigger -Principal $principal -Description "Periodically checks BitLocker status for Wazuh monitoring." -Force
-    
-    Write-Host "Successfully created 'Wazuh-BitLocker-Check' scheduled task to run every 5 minutes." -ForegroundColor Green
+    # We will now create a detailed debug object to log everything we find.
+    $debug_output = @{
+        "diagnostic_run" = @{
+            "timestamp" = (Get-Date -Format 'o'); # ISO 8601 format is better
+            "query" = "Get-CimInstance -ClassName Win32_Volume -Filter 'DriveType=3'";
+            "result_is_null" = ($null -eq $fixedDrives);
+            "result_count" = if ($null -ne $fixedDrives) { @($fixedDrives).Count } else { 0 };
+            "raw_result" = $fixedDrives | Select-Object *; # Select all available properties to see what we're getting
+        }
+    }
 }
 catch {
-    Write-Error "CRITICAL: Failed to create the scheduled task. Error: $($_.Exception.Message)"
-    exit 1
+    # If the WMI query itself fails for any reason, log that error.
+    $debug_output = @{
+        "diagnostic_run" = @{
+            "timestamp" = (Get-Date -Format 'o');
+            "state" = "error";
+            "message" = "The WMI query 'Get-CimInstance' failed to execute. Error: $($_.Exception.Message)"
+        }
+    }
 }
-# ====================================================================================
+
+# --- Write the debug output to the log file ---
+$logDir = "C:\ProgramData\Wazuh\logs"
+$logFile = Join-Path -Path $logDir -ChildPath "bitlocker_status.log"
+if (-not (Test-Path $logDir)) {
+    New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+}
+
+# Use -Depth 3 to ensure we can see all the nested properties of the WMI object.
+$finalJson = ConvertTo-Json -InputObject $debug_output -Depth 3
+
+# Overwrite the log file with the latest diagnostic data.
+$finalJson | Out-File -FilePath $logFile -Encoding utf8
