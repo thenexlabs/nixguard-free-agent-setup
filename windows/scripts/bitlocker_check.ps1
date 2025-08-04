@@ -22,8 +22,6 @@ try {
 
     $bitlockerVolumes = Get-BitLockerVolume -MountPoint $validDriveLetters
     
-    # --- THIS IS THE FINAL CORRECTED LOGIC ---
-    # It now correctly identifies both a null result AND an empty result as a failure.
     if ($null -eq $bitlockerVolumes -or $bitlockerVolumes.Count -eq 0) {
         $output = @{ "bitlocker_status" = @{ "state" = "error"; "message" = "No BitLocker-managed volumes found on fixed drives." } }
     } else {
@@ -47,5 +45,9 @@ catch {
 
 # Write the JSON output to the dedicated log file.
 $logFile = "C:\ProgramData\Wazuh\logs\bitlocker_status.log"
-$finalJson = ConvertTo-Json -InputObject $output -Compress
+
+# --- THIS IS THE FINAL CORRECTED LINE ---
+# Add -Depth 5 to ensure the entire nested object is converted to JSON correctly.
+$finalJson = ConvertTo-Json -InputObject $output -Compress -Depth 5
+
 $finalJson | Out-File -FilePath $logFile -Encoding utf8
