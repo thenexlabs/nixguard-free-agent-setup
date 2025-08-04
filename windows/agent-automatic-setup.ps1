@@ -246,27 +246,44 @@ if ($decodedPayload -ne $null) {
         $wazuhAgentPath = "C:\Program Files (x86)\ossec-agent"
         $destinationScriptPath = Join-Path $wazuhAgentPath "bitlocker_check.ps1"
         
-        # --- 1. Download the PowerShell check script from GitHub to the endpoint ---
+        # --- 1. Download the PowerShell check script from GitHub ---
         Write-Host "Downloading BitLocker check script from $bitlockerScriptUrl..."
         try {
-            # Ensure the destination directory exists before downloading
             if (-not (Test-Path $wazuhAgentPath)) {
                 New-Item -Path $wazuhAgentPath -ItemType Directory -Force | Out-Null
             }
-            # Use TLS 1.2 for security and compatibility
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri $bitlockerScriptUrl -OutFile $destinationScriptPath -UseBasicParsing
             Write-Host "Successfully downloaded BitLocker check script to '$destinationScriptPath'."
         }
         catch {
             Write-Error "CRITICAL: Failed to download the BitLocker script from GitHub. Error: $($_.Exception.Message)"
-            Write-Error "Please check network connectivity and firewall rules. Cannot proceed."
             exit 1 
         }
 
-        # --- 2. Add the Wodle for Command Monitoring ---
+        # --- 2. NEW: Enable Remote Command Execution for the Command Wodle (Required) ---
+        # This is the critical setting that allows the agent to run scheduled commands.
+        Write-Host "Enabling wazuh_command.remote_commands security option..."
         try {
-            Write-Host "Modifying '$configPath' for BitLocker monitoring using the Command Wodle..."
+            $etcDir = "C:\Program Files (x86)\ossec-agent\etc"
+            $internalOptionsPath = Join-Path -Path $etcDir "local_internal_options.conf"
+            $setting = "wazuh_command.remote_commands=1"
+
+            # Ensure the 'etc' directory exists before creating the file
+            if (-not (Test-Path $etcDir)) {
+                New-Item -Path $etcDir -ItemType Directory -Force | Out-Null
+            }
+            Set-Content -Path $internalOptionsPath -Value $setting
+            Write-Host "Successfully configured local_internal_options.conf for the Command Wodle." -ForegroundColor Green
+        }
+        catch {
+            Write-Error "CRITICAL: Failed to create or write to local_internal_options.conf. Error: $($_.Exception.Message)"
+            exit 1
+        }
+
+        # --- 3. REVISED: Modify ossec.conf to use the Command Wodle ---
+        try {
+            Write-Host "Modifying '$configPath' to use the modern Command Wodle for BitLocker monitoring..."
             [xml]$ossecConf = Get-Content -Path $configPath
 
             # A) Add the <wodle name="command"> block if it doesn't exist
@@ -276,11 +293,11 @@ if ($decodedPayload -ne $null) {
                 $wodleNode = $ossecConf.CreateElement('wodle')
                 $wodleNode.SetAttribute('name', 'command')
 
-                # Add child elements
+                # Add child elements for the wodle configuration
                 $wodleNode.AppendChild($ossecConf.CreateElement('disabled')).InnerText = 'no'
                 $wodleNode.AppendChild($ossecConf.CreateElement('tag')).InnerText = 'bitlocker-monitoring'
                 
-                # --- Use the Bulletproof Base64 Command ---
+                # --- Use the Bulletproof Base64 Command Method ---
                 $scriptContent = Get-Content -Path $destinationScriptPath -Raw
                 $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContent))
                 $wodleNode.AppendChild($ossecConf.CreateElement('command')).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
@@ -296,9 +313,29 @@ if ($decodedPayload -ne $null) {
                 Write-Host "BitLocker command wodle block already exists. Skipping."
             }
 
-            # --- 3. Save the modified configuration file ---
+            # B) Add File Integrity Monitoring (FIM) for the agent's own directory (Still a good practice)
+            $syscheckNode = $ossecConf.ossec_config.syscheck
+            if ($syscheckNode) {
+                $fimPath = "C:\Program Files (x86)\ossec-agent"
+                $existingFimDir = $syscheckNode.directories | Where-Object { $_.'#text' -eq $fimPath }
+                if (-not $existingFimDir) {
+                    $dirNode = $ossecConf.CreateElement('directories')
+                    $dirNode.SetAttribute('check_all', 'yes')
+                    $dirNode.SetAttribute('report_changes', 'yes')
+                    $dirNode.InnerText = $fimPath
+                    $syscheckNode.AppendChild($dirNode) | Out-Null
+                    Write-Host "Added FIM rule to monitor '$fimPath' for tampering."
+                } else {
+                    Write-Host "FIM rule for '$fimPath' already exists. Skipping."
+                }
+            } else {
+                Write-Warning "Could not find '<syscheck>' node in ossec.conf to add FIM rule."
+            }
+            
+            # --- 4. Save the final configuration file ---
             $ossecConf.Save($configPath)
             Write-Host "Successfully saved updated configuration to '$configPath'."
+
         }
         catch {
             Write-Error "An error occurred while modifying '$configPath'. Error: $($_.Exception.Message)"
