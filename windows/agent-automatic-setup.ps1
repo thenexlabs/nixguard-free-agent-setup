@@ -275,15 +275,23 @@ if ($decodedPayload -ne $null) {
                 $localfileNode = $ossecConf.CreateElement('localfile')
                 
                 # --- THE FINAL, CORRECTED CONFIGURATION ---
-                # Add the <log_format> tag with the value 'command'. This is REQUIRED by this agent version.
-                # It satisfies the agent's syntax check while preventing it from double-wrapping the JSON output.
+                # Add the <log_format> tag with the value 'command'.
                 $logFormatNode = $ossecConf.CreateElement('log_format')
                 $logFormatNode.InnerText = 'command'
                 $localfileNode.AppendChild($logFormatNode) | Out-Null
 
-                # Use the GPO-resistant command to execute the script
+                # --- THE BULLETPROOF COMMAND METHOD (BASE64) ---
+                # This method is immune to all special characters, quotes, and escaping issues.
+                
+                # 1. Read the raw content of the script file.
+                $scriptContent = Get-Content -Path $destinationScriptPath -Raw
+                
+                # 2. Convert the script content to a Base64-encoded string.
+                $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($scriptContent))
+                
+                # 3. Use the -EncodedCommand parameter.
                 $commandNode = $ossecConf.CreateElement('command')
-                $commandNode.InnerText = "powershell.exe -ExecutionPolicy Bypass -NoProfile -Command `"`& {Get-Content '$destinationScriptPath' | Invoke-Expression}`""
+                $commandNode.InnerText = "powershell.exe -EncodedCommand $encodedCommand"
                 $localfileNode.AppendChild($commandNode) | Out-Null
                 
                 # Add the frequency for how often the command runs
@@ -298,7 +306,7 @@ if ($decodedPayload -ne $null) {
 
                 # Add the fully constructed <localfile> block to the main config
                 $ossecConf.ossec_config.AppendChild($localfileNode) | Out-Null
-                Write-Host "Added '<localfile>' block for BitLocker monitoring with required log_format."
+                Write-Host "Added '<localfile>' block for BitLocker monitoring using robust Base64 encoding."
             } else {
                 Write-Host "BitLocker '<localfile>' block already exists. Skipping."
             }
