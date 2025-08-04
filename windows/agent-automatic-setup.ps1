@@ -239,6 +239,72 @@ if ($decodedPayload -ne $null) {
     }
 
     if ($requiresEncryption) {
+        # ====================================================================================
+        # SECTION: CONFIGURE POWERSHELL EXECUTION POLICY
+        # This block ensures that the system's execution policy is set to 'RemoteSigned'
+        # to allow the Wazuh agent to run local monitoring scripts.
+        # ====================================================================================
+
+        Write-Host "--- Checking and Configuring PowerShell Execution Policy ---"
+
+        # Step 1: Verify the script is running with Administrator privileges.
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+        if (-not $isAdmin) {
+            Write-Error "CRITICAL: This script must be run with Administrator privileges to change the Execution Policy."
+            Write-Error "Please re-run the script from an administrative PowerShell prompt. Aborting."
+            # Exit the script if not running as admin.
+            exit 1
+        }
+
+        # Step 2: Get the current execution policy for the LocalMachine scope.
+        try {
+            $currentPolicy = Get-ExecutionPolicy -Scope LocalMachine -ErrorAction Stop
+        }
+        catch {
+            # This can happen on very old systems, but it's good practice to handle it.
+            # We'll treat an undefined policy as 'Restricted'.
+            $currentPolicy = 'Restricted'
+        }
+
+        # Step 3: Check the policy and change it only if necessary.
+        if ($currentPolicy -eq 'RemoteSigned') {
+            Write-Host "SUCCESS: Execution Policy is already set to 'RemoteSigned'. No action needed." -ForegroundColor Green
+        }
+        elseif ($currentPolicy -in ('Unrestricted', 'Bypass')) {
+            # If the policy is already less restrictive, we don't need to change it.
+            Write-Host "WARNING: Execution Policy is '$currentPolicy', which is less restrictive than 'RemoteSigned'. No action needed." -ForegroundColor Yellow
+        }
+        else {
+            # This will handle 'Restricted' and 'AllSigned' policies.
+            Write-Host "INFO: Current Execution Policy is '$currentPolicy'. Attempting to set it to 'RemoteSigned'..." -ForegroundColor Yellow
+            try {
+                # Use -Force to suppress the confirmation prompt, which is essential for automation.
+                Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force -ErrorAction Stop
+                
+                # Verify that the change was successful.
+                $newPolicy = Get-ExecutionPolicy -Scope LocalMachine
+                if ($newPolicy -eq 'RemoteSigned') {
+                    Write-Host "SUCCESS: Execution Policy has been successfully set to 'RemoteSigned'." -ForegroundColor Green
+                }
+                else {
+                    # This can happen if a Group Policy is overriding the local setting.
+                    Write-Error "CRITICAL: Failed to set Execution Policy. A Group Policy (GPO) may be preventing this change."
+                    Write-Error "The current policy is still '$newPolicy'. Please check your domain GPO settings. Aborting."
+                    exit 1
+                }
+            }
+            catch {
+                Write-Error "CRITICAL: An unexpected error occurred while setting the Execution Policy. Error: $($_.Exception.Message)"
+                exit 1
+            }
+        }
+
+        Write-Host "--- Execution Policy configuration complete ---"
+        # ====================================================================================
+        # (The rest of your agent setup script continues here)
+        # ====================================================================================
+
         Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
 
         # --- Define Paths and URL ---
