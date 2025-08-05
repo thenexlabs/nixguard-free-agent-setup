@@ -1,9 +1,7 @@
-# bitlocker_check.ps1 (FINAL PRODUCTION VERSION WITH RENAME LOGIC)
+# bitlocker_check.ps1
 # This script robustly checks BitLocker status and writes the output to a log file.
 
 try {
-    # ... (the entire try/catch block from our last "production" version remains exactly the same) ...
-    # ... I am omitting it here for brevity, but it should be the one that handles the empty array ...
     if (-not (Get-Module -ListAvailable -Name BitLocker)) {
         throw "BitLocker PowerShell module is not available."
     }
@@ -61,3 +59,4 @@ $finalJson | Out-File -FilePath $tempLogFile -Encoding utf8
 # 3. Rename the temporary file to the final file name. This is an atomic operation.
 #    The Wazuh agent will detect this change and read the new file.
 Move-Item -Path $tempLogFile -Destination $finalLogFile -Force
+
