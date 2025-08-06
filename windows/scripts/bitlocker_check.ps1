@@ -74,7 +74,7 @@ $tempLogFile = Join-Path -Path $logDir -ChildPath "bitlocker_status.tmp"
 
 try {
     $finalJson = $output | ConvertTo-Json -Compress -Depth 5
-    $finalJson | Out-File -FilePath $tempLogFile -Encoding utf8 -NoNewline
+    $finalJson | Out-File -FilePath $tempLogFile -Encoding utf8
     Move-Item -Path $tempLogFile -Destination $finalLogFile -Force
 }
 catch {
