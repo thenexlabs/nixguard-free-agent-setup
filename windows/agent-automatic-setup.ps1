@@ -17,7 +17,6 @@ $configPath = $ossecAgentPath + "\\ossec.conf"
 
 # Open PowerShell as an Administrator to run this script
 
-# --- Final Robust Uninstall Function ---
 function Uninstall-WazuhAgent {
 
     Write-Host "--- Starting Wazuh Agent Uninstall Process ---" -ForegroundColor Yellow
@@ -499,3 +498,4 @@ Write-Host "NixGuard agent setup successfully."
 Start-Process -FilePath "NET" -ArgumentList "START WazuhSvc"
 
 Write-Host "NixGuard agent started successfully."
+
