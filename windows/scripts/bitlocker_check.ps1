@@ -5,7 +5,6 @@
 # --- Section 1: Pre-flight Checks & Environment Setup ---
 
 $logDir = "C:\ProgramData\Wazuh\logs"
-# CRITICAL FIX: Ensure the log directory exists. This prevents the most common silent failure.
 try {
     if (-not (Test-Path -Path $logDir)) {
         New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
