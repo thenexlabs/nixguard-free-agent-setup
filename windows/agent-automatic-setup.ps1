@@ -94,7 +94,6 @@ Uninstall-WazuhAgent
 # Kill the cached file
 Remove-Item -Path (Join-Path -Path $env:TEMP -ChildPath "agent-automatic-setup.ps1") -ErrorAction SilentlyContinue
 
-# --- UNCHANGED: Your pre-installation check loop is preserved ---
 # Install the Wazuh agent
 ## loop until file is gone
 $fileExists = $true
@@ -108,16 +107,12 @@ while ($fileExists) {
     }
 }
 
-# --- UNCHANGED: Your retry logic is preserved ---
 $maxRetries = 4
 $retryCount = 0
 
-# --- MODIFIED: The installation command block ---
 do {
-    # UNCHANGED: The download command is the same.
     Invoke-WebRequest -Uri https://packages.wazuh.com/4.x/windows/wazuh-agent-4.9.1-1.msi -OutFile "${env:tmp}\wazuh-agent"
 
-    # --- THE FIX: START ---
     # We build the command that we know works manually into a single string.
     # The grave accent (`) is used to escape the inner double quotes around the path.
     $workingCommand = "msiexec.exe /i `"`${env:tmp}\wazuh-agent`" /q WAZUH_MANAGER='$ipAddress' WAZUH_REGISTRATION_SERVER='$ipAddress' WAZUH_AGENT_GROUP='$groupLabel' WAZUH_AGENT_NAME='$agentName'"
@@ -125,9 +120,7 @@ do {
     # We now execute this command in a new, clean PowerShell process.
     # This breaks out of the parent script's restricted context and mimics a manual execution.
     $wazuhInstaller = Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -NoProfile -Command `"$workingCommand`"" -PassThru -Wait
-    # --- THE FIX: END ---
 
-    # UNCHANGED: The rest of your retry logic works perfectly with the new process variable.
     if ($wazuhInstaller.ExitCode -ne 0) {
         Write-Host "Installer process exited with code $($wazuhInstaller.ExitCode)"
         $retryCount++
@@ -143,7 +136,6 @@ do {
     }
 } while ($true)
 
-# --- UNCHANGED: Your post-installation check loop is preserved ---
 $counter = 0
 $fileExists = $false
 while (-not $fileExists) {
@@ -157,7 +149,6 @@ while (-not $fileExists) {
     $counter++
 }
 
-# --- UNCHANGED: Your final configuration edit is preserved ---
 # This acts as a final safeguard to ensure the IP is correct.
 $config = Get-Content -Path $configPath
 $config = $config -replace '<address>0.0.0.0</address>', "<address>$ipAddress</address>"
@@ -275,9 +266,6 @@ if ($decodedPayload -ne $null) {
             exit 1 
         }
 
-        # ====================================================================================
-        # --- FINAL VERSION: CREATE A RELIABLE, REPEATING SCHEDULED TASK (CORRECTED SYNTAX) ---
-        # ====================================================================================
         Write-Host "Creating a reliable, repeating Scheduled Task for BitLocker monitoring..."
         try {
             # Define the action with the ExecutionPolicy Bypass flag
