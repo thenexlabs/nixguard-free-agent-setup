@@ -1,1 +1,2 @@
-# nixguard-agent-setup
+# nixguard free agent setup
+
