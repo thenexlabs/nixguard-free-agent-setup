@@ -59,22 +59,21 @@ uninstall_wazuh_agent() {
 fix_dependencies() {
     echo "Starting dependency fix process..."
 
-    # Update the package lists
-    sudo DEBIAN_FRONTEND=noninteractive apt-get update
-    if [ $? -ne 0 ]; then
-        echo "Failed to update package lists. Please check your network connection."
-        return 1
-    fi
-
-    # Attempt to fix broken dependencies
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -f install -y
-    if [ $? -ne 0 ]; then
-        echo "Failed to fix broken dependencies. Please check the logs for more details."
-        return 1
-    fi
-
-    # Install auditd and ensure it's running based on the distro
     if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ] || [ "$distro" == "kali" ]; then
+        # Update the package lists
+        sudo DEBIAN_FRONTEND=noninteractive apt-get update
+        if [ $? -ne 0 ]; then
+            echo "Failed to update package lists. Please check your network connection."
+            return 1
+        fi
+
+        # Attempt to fix broken dependencies
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -f install -y
+        if [ $? -ne 0 ]; then
+            echo "Failed to fix broken dependencies. Please check the logs for more details."
+            return 1
+        fi
+
         sudo apt-get install -y auditd audispd-plugins
         if [ $? -ne 0 ]; then
             echo "Failed to install auditd on $distro. Please check the logs for more details."
@@ -169,6 +168,27 @@ add_ignore_directories() {
     echo "New <ignore> tags have been added after the comment 'Files/directories to ignore'."
 }
 
+# --- ADDED: Duplicate-Safe XML Performance Injection ---
+optimize_syscheck_performance() {
+    local ossecConfPath=$1
+    echo "Optimizing Syscheck (FIM) performance to prevent high CPU/IO usage..."
+    
+    # Remove any pre-existing performance tags to prevent XML parser errors from duplicates
+    sudo sed -i '/<frequency>/d' $ossecConfPath
+    sudo sed -i '/<max_eps>/d' $ossecConfPath
+    sudo sed -i '/<process_priority>/d' $ossecConfPath
+    sudo sed -i '/<sleep>/d' $ossecConfPath
+    sudo sed -i '/<nodiff>/d' $ossecConfPath
+    
+    # Inject clean, optimized parameters right after the <syscheck> tag
+    sudo sed -i '/<syscheck>/a \ \ \ \ <max_eps>50</max_eps>\n\ \ \ \ <frequency>43200</frequency>\n\ \ \ \ <process_priority>10</process_priority>\n\ \ \ \ <sleep>20</sleep>' $ossecConfPath
+    
+    # Add nodiff tags to prevent memory spikes on large binaries
+    sudo sed -i '/<\/syscheck>/i \ \ \ \ <nodiff>/bin</nodiff>\n\ \ \ \ <nodiff>/sbin</nodiff>\n\ \ \ \ <nodiff>/usr/bin</nodiff>\n\ \ \ \ <nodiff>/usr/sbin</nodiff>' $ossecConfPath
+    
+    echo "Syscheck performance optimized."
+}
+
 # Function to install Wazuh agent
 install_wazuh_agent() {
     local WAZUH_MANAGER="$MANAGER_IP"
@@ -179,6 +199,9 @@ install_wazuh_agent() {
     echo "Agent name: $WAZUH_AGENT_NAME"
     echo "Agent group: $WAZUH_AGENT_GROUP"
 
+    # ==========================================
+    # STEP 1: DISTRO-SPECIFIC PACKAGE INSTALLATION
+    # ==========================================
     if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ] || [ "$distro" == "kali" ]; then
         if [ "$arch" == "amd64" ]; then
             sudo wget -O wazuh-agent_nixguard_amd64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_amd64.deb
@@ -187,102 +210,6 @@ install_wazuh_agent() {
             sudo wget -O wazuh-agent_nixguard_arm64.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.9.1-1_arm64.deb
             sudo DEBIAN_FRONTEND=noninteractive dpkg -i ./wazuh-agent_nixguard_arm64.deb
         fi
-
-        # Fix dependencies
-        fix_dependencies
-
-        # Define the path to the OSSEC configuration file
-        ossecConfPath="/var/ossec/etc/ossec.conf"
-
-        # Set the manager IP in the ossec.conf file
-        sudo sed -i "s/<address>.*<\/address>/<address>${WAZUH_MANAGER}<\/address>/g" "$ossecConfPath"
-
-        # Define the enrollment section
-        ENROLLMENT_SECTION="<enrollment>\n\t<enabled>yes</enabled>\n\t<manager_address>${WAZUH_MANAGER}</manager_address>\n\t<agent_name>${WAZUH_AGENT_NAME}</agent_name>\n</enrollment>"
-
-        # Add the enrollment section to the ossec.conf file
-        sudo awk -v enrollment="$ENROLLMENT_SECTION" '
-            /<client>/ { print; print enrollment; next }
-            !/<enrollment>/ { print }
-        ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
-
-        # Ensure the group section exists
-        if ! grep -q '<groups>' "$ossecConfPath"; then
-            groupSection="<groups>${GROUP_LABEL}</groups>"
-            sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
-        fi
-
-        # Update the log_format in the ossec.conf file to json
-        # sudo sed -i 's/<log_format>[^<]*<\/log_format>/<log_format>json<\/log_format>/' $ossecConfPath
-
-        # Define the new directories to monitor with whodata enabled
-        directories=(
-            "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"  # Root directory
-            # "<directories check_all=\"yes\" realtime=\"yes\">/etc</directories>"  # Configuration files
-            # "<directories check_all=\"yes\" realtime=\"yes\">/var</directories>"  # Variable files (limited)
-            # "<directories check_all=\"yes\" realtime=\"yes\">/usr</directories>"  # User programs
-            "<directories check_all=\"yes\" realtime=\"yes\">/home</directories>"  # Home directories
-            # "<directories check_all=\"yes\" realtime=\"yes\">/bin</directories>"  # Binaries
-            "<directories check_all=\"yes\" realtime=\"yes\">${HOME}/Downloads</directories>"  # User Downloads folder
-        )
-
-        # Excluding the /tmp directory as it typically contains many transient files
-
-        # Adding the ignore tag for /home/.cache
-        ignore_directories=(
-            "<ignore>${HOME}/.mozilla</ignore>"
-            "<ignore>${HOME}/.cache</ignore>"
-            "<ignore>${HOME}/.config</ignore>"
-            "<ignore>${HOME}/.local</ignore>"
-            "<ignore>${HOME}/.xsession-errors</ignore>"
-            "<ignore>/root/.wget-hsts</ignore>"
-            "<ignore>/root/.rpmdb</ignore>"
-        )
-
-        # Function to remove old directories tags
-        remove_directories_tags $ossecConfPath
-
-        # Function to add new directories tags
-        add_new_directories $ossecConfPath "${directories[@]}"
-
-        # Function to add ignore directories tags
-        add_ignore_directories $ossecConfPath "${ignore_directories[@]}"
-
-        echo "Directory monitoring configuration added successfully."
-
-        # Restart Wazuh Agent to apply the new configuration
-        sudo systemctl restart wazuh-agent
-
-        # Verify if the audit rules for monitoring the selected directories are applied
-        auditctl -l | grep wazuh_fim
-
-        echo "Wazuh agent installed and configured successfully."
-
-        ###########################################################################################
-
-        sudo apt update
-        sudo apt -y install jq
-
-        # Define the URL of the remove-threat.sh script
-        removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
-
-        # Define the destination directory
-        destDir="/var/ossec/active-response/bin"
-
-        # Define the path to save the remove-threat.sh script in the destination directory
-        removeThreatPath="$destDir/remove-threat.sh"
-
-        # Download the remove-threat.sh script
-        sudo wget -O $removeThreatPath $removeThreatUrl
-
-        sudo chmod 750 /var/ossec/active-response/bin/remove-threat.sh
-        sudo chown root:wazuh /var/ossec/active-response/bin/remove-threat.sh
-
-        echo "Virus threat response configuration added successfully."
-
-        ###########################################################################################
-
-        echo "NixGuard agent setup successfully."
     elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
         if [ "$arch" == "amd64" ]; then
             sudo wget -O wazuh-agent_nixguard.x86_64.rpm https://packages.wazuh.com/4.x/yum/wazuh-agent-4.9.1-1.x86_64.rpm
@@ -296,15 +223,100 @@ install_wazuh_agent() {
         exit 1
     fi
 
-    # Fix dependencies
+    # Fix dependencies immediately after package installation
     fix_dependencies
 
-    # Start the Wazuh agent
+    # ==========================================
+    # STEP 2: GLOBAL AGENT CONFIGURATION
+    # ==========================================
+    ossecConfPath="/var/ossec/etc/ossec.conf"
+
+    # Set the manager IP in the ossec.conf file
+    sudo sed -i "s/<address>.*<\/address>/<address>${WAZUH_MANAGER}<\/address>/g" "$ossecConfPath"
+
+    # Define the enrollment section
+    ENROLLMENT_SECTION="<enrollment>\n\t<enabled>yes</enabled>\n\t<manager_address>${WAZUH_MANAGER}</manager_address>\n\t<agent_name>${WAZUH_AGENT_NAME}</agent_name>\n</enrollment>"
+
+    # Add the enrollment section to the ossec.conf file
+    sudo awk -v enrollment="$ENROLLMENT_SECTION" '
+        /<client>/ { print; print enrollment; next }
+        !/<enrollment>/ { print }
+    ' "$ossecConfPath" > temp_ossec.conf && sudo mv temp_ossec.conf "$ossecConfPath"
+
+    # Ensure the group section exists (Critical for multi-tenant shared servers)
+    if ! grep -q '<groups>' "$ossecConfPath"; then
+        groupSection="<groups>${GROUP_LABEL}</groups>"
+        sudo sed -i "/<\/enrollment>/i $groupSection" "$ossecConfPath"
+    fi
+
+    # Define the new directories to monitor (Optimized: /home is scheduled realtime="no" to prevent CPU melt)
+    directories=(
+        "<directories check_all=\"yes\" realtime=\"yes\">/root</directories>"
+        "<directories check_all=\"yes\" realtime=\"no\">/home</directories>"
+    )
+
+    # Multi-Tenant Regex Ignores (Covers all users on shared servers dynamically)
+    ignore_directories=(
+        "<ignore type=\"sregex\">^/home/[^/]+/\.cache</ignore>"
+        "<ignore type=\"sregex\">^/home/[^/]+/\.mozilla</ignore>"
+        "<ignore type=\"sregex\">^/home/[^/]+/\.config</ignore>"
+        "<ignore type=\"sregex\">^/home/[^/]+/\.local</ignore>"
+        "<ignore type=\"sregex\">^/home/[^/]+/\.xsession-errors</ignore>"
+        "<ignore>/root/.wget-hsts</ignore>"
+        "<ignore>/root/.rpmdb</ignore>"
+    )
+
+    # Apply FIM directory configurations
+    remove_directories_tags $ossecConfPath
+    add_new_directories $ossecConfPath "${directories[@]}"
+    add_ignore_directories $ossecConfPath "${ignore_directories[@]}"
+
+    # Optimize Syscheck CPU/IO Performance
+    optimize_syscheck_performance $ossecConfPath
+
+    echo "Directory monitoring configuration added successfully."
+
+    # ==========================================
+    # STEP 3: ACTIVE RESPONSE REMEDIATION DEPLOYMENT
+    # ==========================================
+    # Install jq dependency
+    if [ "$distro" == "debian" ] || [ "$distro" == "ubuntu" ] || [ "$distro" == "kali" ]; then
+        sudo apt update -qq
+        sudo apt -y install jq
+    elif [ "$distro" == "centos" ] || [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
+        sudo yum install -y -q jq
+    fi
+
+    destDir="/var/ossec/active-response/bin"
+    sudo mkdir -p $destDir
+
+    # 1. Download the remove-threat.sh script
+    removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
+    removeThreatPath="$destDir/remove-threat.sh"
+    sudo wget -O $removeThreatPath $removeThreatUrl
+    sudo chmod 750 $removeThreatPath
+    sudo chown root:wazuh $removeThreatPath
+
+    # 2. Download the nixguard-remediate.sh script (Added for active remediation)
+    remediateUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/nixguard-remediate.sh"
+    remediatePath="$destDir/nixguard-remediate.sh"
+    sudo wget -O $remediatePath $remediateUrl
+    sudo chmod 750 $remediatePath
+    sudo chown root:wazuh $remediatePath
+
+    echo "Active Response remediation configurations added successfully."
+
+    # ==========================================
+    # STEP 4: SERVICE STARTUP & VERIFICATION
+    # ==========================================
     sudo systemctl daemon-reload
     sudo systemctl enable wazuh-agent
-    sudo systemctl start wazuh-agent
+    sudo systemctl restart wazuh-agent
 
-    echo "NixGuard agent started successfully."
+    # Verify if the audit rules for monitoring the selected directories are applied
+    auditctl -l | grep wazuh_fim
+
+    echo "NixGuard agent setup and started successfully."
 }
 
 # Main script execution

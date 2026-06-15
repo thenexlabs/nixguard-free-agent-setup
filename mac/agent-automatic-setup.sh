@@ -41,7 +41,9 @@ REPO_BASE_URL="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup
 WAZUH_PKG_URL_INTEL="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.intel64.pkg"
 WAZUH_PKG_URL_ARM="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.arm64.pkg"
 AR_SCRIPT_URL="${REPO_BASE_URL}/remove-threat.sh"
-FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/scripts/filevault_check.sh"
+# UPDATED: Removed /scripts/ from the URLs to match the flattened directory structure
+REMEDIATE_SCRIPT_URL="${REPO_BASE_URL}/nixguard-remediate.sh"
+FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/filevault_check.sh"
 GET_USER_API_URL="https://api.thenex.world/get-user"
 FIM_CONF_URL="${REPO_BASE_URL}/config/fim.conf"
 FILEVAULT_CONF_URL="${REPO_BASE_URL}/config/filevault.conf"
@@ -158,16 +160,37 @@ configure_ossec_conf() {
     echo "Custom FIM configuration applied successfully."
 }
 
-# --- 7. Install Active Response Script ---
+# --- ADDED: CPU/IO Performance Optimization Function (macOS) ---
+optimize_syscheck_performance() {
+    echo "--- Optimizing Syscheck (FIM) performance to prevent high CPU/IO usage ---"
+    local ossecConfPath="/Library/Ossec/etc/ossec.conf"
+    
+    # Use perl for robust, cross-platform in-place XML manipulation (bypasses macOS sed quirks)
+    perl -i -pe 's|<syscheck>|<syscheck>\n    <max_eps>50</max_eps>\n    <frequency>43200</frequency>\n    <process_priority>10</process_priority>\n    <sleep>20</sleep>|g' "$ossecConfPath"
+    perl -i -pe 's|</syscheck>|    <nodiff>/bin</nodiff>\n    <nodiff>/sbin</nodiff>\n    <nodiff>/usr/bin</nodiff>\n    <nodiff>/usr/sbin</nodiff>\n  </syscheck>|g' "$ossecConfPath"
+    
+    echo "Syscheck performance optimized."
+}
+
+# --- 7. Install Active Response Scripts ---
 install_ar_script() {
-    echo "--- Installing Active Response script for threat remediation ---"
+    echo "--- Installing Active Response scripts for threat remediation ---"
     local destDir="/Library/Ossec/active-response/bin"
     local removeThreatPath="$destDir/remove-threat.sh"
+    local remediatePath="$destDir/nixguard-remediate.sh"
     mkdir -p "$destDir"
+    
+    # 1. Download remove-threat.sh
     curl -Lo "$removeThreatPath" "$AR_SCRIPT_URL"
     chmod 750 "$removeThreatPath"
     chown root:wazuh "$removeThreatPath"
-    echo "Active Response script installed."
+    
+    # 2. Download nixguard-remediate.sh (Added for active remediation)
+    curl -Lo "$remediatePath" "$REMEDIATE_SCRIPT_URL"
+    chmod 750 "$remediatePath"
+    chown root:wazuh "$remediatePath"
+    
+    echo "Active Response scripts installed."
 }
 
 # --- 8. Install and Schedule FileVault Encryption Monitoring ---
@@ -242,6 +265,7 @@ echo "Starting NixGuard Agent Setup for macOS..."
 uninstall_wazuh_agent
 install_and_register_agent
 configure_ossec_conf
+optimize_syscheck_performance # Added FIM CPU/IO optimizations
 install_ar_script
 
 # --- Intelligent Feature Deployment ---
@@ -260,7 +284,7 @@ else
     
     # --- DEBUGGING: Print the exact data received from the API ---
     echo "--- Compliance Standards from API ---" >&2
-    echo "$COMPLIANCE_STANDARDS" >&2
+    echo "$COMPLIONS_STANDARDS" >&2
     echo "-------------------------------------" >&2
 
     # This is the full, correct list of standards.

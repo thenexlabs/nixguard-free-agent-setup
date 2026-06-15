@@ -1,0 +1,1 @@
+ae6e542 - updated macOS scripts + fileVault encryption monitoring (2025-10-03)
