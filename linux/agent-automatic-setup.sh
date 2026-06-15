@@ -291,14 +291,16 @@ install_wazuh_agent() {
     sudo mkdir -p $destDir
 
     # 1. Download the remove-threat.sh script
-    removeThreatUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/remove-threat.sh"
+    # FIXED: Changed to direct raw.githubusercontent.com URL and added /active-response/ subfolder
+    removeThreatUrl="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/linux/active-response/remove-threat.sh"
     removeThreatPath="$destDir/remove-threat.sh"
     sudo wget -O $removeThreatPath $removeThreatUrl
     sudo chmod 750 $removeThreatPath
     sudo chown root:wazuh $removeThreatPath
 
     # 2. Download the nixguard-remediate.sh script (Added for active remediation)
-    remediateUrl="https://github.com/thenexlabs/nixguard-agent-setup/raw/main/linux/nixguard-remediate.sh"
+    # FIXED: Changed to direct raw.githubusercontent.com URL and added /active-response/ subfolder
+    remediateUrl="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/linux/active-response/nixguard-remediate.sh"
     remediatePath="$destDir/nixguard-remediate.sh"
     sudo wget -O $remediatePath $remediateUrl
     sudo chmod 750 $remediatePath

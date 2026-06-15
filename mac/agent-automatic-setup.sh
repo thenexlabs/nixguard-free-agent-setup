@@ -25,25 +25,17 @@ AGENT_NAME_BASE=$2 # Store the base name
 API_KEY=$3
 GROUP_LABEL="default"
 
-# # --- Create a unique agent name for CI/CD or re-run environments ---
-# if [ -n "$GITHUB_RUN_ID" ]; then
-#   UNIQUE_SUFFIX="${GITHUB_RUN_ID}"
-#   echo "GitHub Actions environment detected. Using run ID for unique agent name."
-# else
-#   UNIQUE_SUFFIX=$(date +%s)
-#   echo "Using timestamp for unique agent name to prevent collisions."
-# fi
-# AGENT_NAME="${AGENT_NAME_BASE}-${UNIQUE_SUFFIX}"
-# echo "Final agent name will be: ${AGENT_NAME}"
-
 # URLs
+# FIXED: Pointing directly to raw.githubusercontent.com
 REPO_BASE_URL="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/mac"
 WAZUH_PKG_URL_INTEL="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.intel64.pkg"
 WAZUH_PKG_URL_ARM="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.arm64.pkg"
-AR_SCRIPT_URL="${REPO_BASE_URL}/remove-threat.sh"
-# UPDATED: Removed /scripts/ from the URLs to match the flattened directory structure
-REMEDIATE_SCRIPT_URL="${REPO_BASE_URL}/nixguard-remediate.sh"
-FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/filevault_check.sh"
+
+# FIXED: Appended /active-response/ subfolder to the download URLs
+AR_SCRIPT_URL="${REPO_BASE_URL}/active-response/remove-threat.sh"
+REMEDIATE_SCRIPT_URL="${REPO_BASE_URL}/active-response/nixguard-remediate.sh"
+FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/active-response/filevault_check.sh"
+
 GET_USER_API_URL="https://api.thenex.world/get-user"
 FIM_CONF_URL="${REPO_BASE_URL}/config/fim.conf"
 FILEVAULT_CONF_URL="${REPO_BASE_URL}/config/filevault.conf"
@@ -284,7 +276,8 @@ else
     
     # --- DEBUGGING: Print the exact data received from the API ---
     echo "--- Compliance Standards from API ---" >&2
-    echo "$COMPLIONS_STANDARDS" >&2
+    # FIXED: Corrected typo from COMPLIONS_STANDARDS to COMPLIANCE_STANDARDS
+    echo "$COMPLIANCE_STANDARDS" >&2
     echo "-------------------------------------" >&2
 
     # This is the full, correct list of standards.

@@ -52,7 +52,7 @@ function Uninstall-WazuhAgent {
     
     # The UninstallString contains the command to run, e.g., "MsiExec.exe /I{PRODUCT-CODE-GUID}"
     # We will modify it to run silently.
-    $uninstallCommand = $wazApp.UninstallString
+    $uninstallCommand = $wazuhApp.UninstallString
     if ($uninstallCommand -like "MsiExec.exe*") {
         # For MSI packages, we replace the interactive flag (/I) with the uninstall flag (/X) and add the quiet flag (/q).
         $productCode = $wazuhApp.PSChildName
@@ -239,8 +239,8 @@ if ($decodedPayload -ne $null) {
         Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
 
         # --- Define Paths and URL ---
-        # UPDATED: Removed /scripts/ from the URL to match the flattened directory structure
-        $bitlockerScriptUrl = "https://github.com/thenexlabs/nixguard-free-agent-setup/raw/main/windows/bitlocker_check.ps1"
+        # FIXED: Changed to direct raw.githubusercontent.com URL and added /active-response/ subfolder
+        $bitlockerScriptUrl = "https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/windows/active-response/bitlocker_check.ps1"
         $wazuhAgentPath = "C:\Program Files (x86)\ossec-agent"
         $destinationScriptPath = Join-Path $wazuhAgentPath "bitlocker_check.ps1"
         
@@ -502,7 +502,8 @@ py -m pip install pyinstaller
 $destDir = "C:\Program Files (x86)\ossec-agent\active-response\bin"
 
 # 1. Download and Compile the remove-threat.py script
-$removeThreatUrl = "https://github.com/thenexlabs/nixguard-agent-setup/raw/main/windows/remove-threat.py"
+# FIXED: Changed to direct raw.githubusercontent.com URL and added /active-response/ subfolder
+$removeThreatUrl = "https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/windows/active-response/remove-threat.py"
 $removeThreatPath = Join-Path -Path $env:TEMP -ChildPath "remove-threat.py"
 Invoke-WebRequest -Uri $removeThreatUrl -OutFile $removeThreatPath
 
@@ -517,7 +518,8 @@ Remove-Item -Path $specPath -ErrorAction SilentlyContinue
 
 # --- FIX #2: Download and Compile the nixguard-remediate.py Active Response Script ---
 Write-Host "Downloading and compiling NixGuard Active Response remediation script..."
-$remediateUrl = "https://github.com/thenexlabs/nixguard-agent-setup/raw/main/windows/nixguard-remediate.py"
+# FIXED: Changed to direct raw.githubusercontent.com URL and added /active-response/ subfolder
+$remediateUrl = "https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/windows/active-response/nixguard-remediate.py"
 $remediatePath = Join-Path -Path $env:TEMP -ChildPath "nixguard-remediate.py"
 Invoke-WebRequest -Uri $remediateUrl -OutFile $remediatePath
 
