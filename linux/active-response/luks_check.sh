@@ -6,6 +6,15 @@
 LOG_FILE="/var/log/luks_status.log"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# LOG ROTATION: If file is > 1MB (1048576 bytes), clear it to prevent infinite growth
+if [ -f "$LOG_FILE" ]; then
+    # Compatible with both GNU stat (Linux) and BSD stat
+    FILE_SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null)
+    if [ -n "$FILE_SIZE" ] && [ "$FILE_SIZE" -gt 1048576 ]; then
+        > "$LOG_FILE"
+    fi
+fi
+
 # Ensure log file exists with restrictive permissions
 touch "$LOG_FILE"
 chmod 600 "$LOG_FILE"

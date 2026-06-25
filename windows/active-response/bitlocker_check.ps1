@@ -65,16 +65,21 @@ catch {
 }
 
 
-# --- Section 3: The Atomic Write Transaction ---
-# This safely writes the $output variable to the immutable log file path.
+# --- Section 3: The Append Write Transaction ---
+# This safely appends the $output variable to the immutable log file path.
 
 $finalLogFile = Join-Path -Path $logDir -ChildPath "bitlocker_status.log"
-$tempLogFile = Join-Path -Path $logDir -ChildPath "bitlocker_status.tmp"
 
 try {
     $finalJson = $output | ConvertTo-Json -Compress -Depth 5
-    $finalJson | Out-File -FilePath $tempLogFile -Encoding utf8 -NoNewline
-    Move-Item -Path $tempLogFile -Destination $finalLogFile -Force
+    
+    # LOG ROTATION: If file is > 1MB, clear it to prevent infinite growth
+    if ((Test-Path $finalLogFile) -and ((Get-Item $finalLogFile).Length -gt 1MB)) {
+        Clear-Content -Path $finalLogFile
+    }
+    
+    # APPEND LOGIC: Guarantees Wazuh logcollector reads the new line
+    $finalJson | Out-File -FilePath $finalLogFile -Encoding utf8 -Append
 }
 catch {
     Write-Error "FATAL: FAILED to write the final log file at '$finalLogFile'. Check disk space or AV logs. Error: $($_.Exception.Message)"

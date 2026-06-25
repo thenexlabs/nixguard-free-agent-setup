@@ -12,12 +12,19 @@ set -e
 
 LOG_DIR="/Library/Ossec/logs"
 FINAL_LOG_FILE="${LOG_DIR}/filevault_status.log"
-TEMP_LOG_FILE="${LOG_DIR}/filevault_status.tmp"
 
 # Ensure the log directory exists. This is a fatal-on-failure check.
 if ! mkdir -p "$LOG_DIR"; then
     echo "FATAL: Could not create log directory at '$LOG_DIR'. Exiting." >&2
     exit 1
+fi
+
+# LOG ROTATION: If file is > 1MB (1048576 bytes), clear it to prevent infinite growth
+if [ -f "$FINAL_LOG_FILE" ]; then
+    FILE_SIZE=$(stat -f%z "$FINAL_LOG_FILE" 2>/dev/null)
+    if [ -n "$FILE_SIZE" ] && [ "$FILE_SIZE" -gt 1048576 ]; then
+        > "$FINAL_LOG_FILE"
+    fi
 fi
 
 # --- Section 2: Core Logic - Get FileVault Status ---
@@ -86,20 +93,12 @@ EOF
     fi
 fi
 
-# --- Section 3: The Atomic Write Transaction ---
-# This safely writes the JSON payload to the immutable log file path.
+# --- Section 3: The Append Write Transaction ---
+# This safely appends the JSON payload to the immutable log file path.
 
-# Use a HEREDOC to write the JSON to a temporary file, then move it.
-# This prevents a partially written file if the script is interrupted.
-# The `tr -d '\n'` command removes newlines to compress the JSON.
-echo "$JSON_PAYLOAD" | tr -d '\n' > "$TEMP_LOG_FILE"
+# The `tr -d '\n'` command removes newlines to compress the JSON into a single line.
+# We use `>>` to append, and then echo a blank line to ensure Wazuh reads it immediately.
+echo "$JSON_PAYLOAD" | tr -d '\n' >> "$FINAL_LOG_FILE"
+echo "" >> "$FINAL_LOG_FILE"
 
-# The `mv` command is an atomic operation on POSIX systems.
-if mv "$TEMP_LOG_FILE" "$FINAL_LOG_FILE"; then
-    # Optional: Log success to stdout for debugging scheduled tasks
-    # echo "Successfully wrote FileVault status to $FINAL_LOG_FILE"
-    exit 0
-else
-    echo "FATAL: FAILED to move temp log file to '$FINAL_LOG_FILE'. Check permissions or disk space." >&2
-    exit 1
-fi
+exit 0
