@@ -14,7 +14,8 @@ It is the group-label variant of [nixguard-agent-setup](https://github.com/thene
 - **Group-based enrollment**: the agent is registered with an agent group (`<groups>` in the enrollment block), so endpoints land in the right tenant or policy group.
 - **Clean reinstall**: any existing Wazuh agent is stopped and removed before the new one is installed.
 - **Tuned file integrity monitoring**: rate-limited, low-priority syscheck scans on a 12-hour baseline. On Linux, `/root` is watched in real time, `/home` on a schedule, and per-user cache and config folders are ignored.
-- **Compliance-driven BitLocker monitoring (Windows)**: the script looks up the compliance preferences for your group label from the NixGuard API. If they include SOC 2, NIST SP 800-53, ISO 27001, GDPR, HIPAA, PCI DSS, PIPEDA or CIS Controls, it installs a BitLocker status check whose JSON output the agent forwards for compliance reporting.
+- **Compliance-driven checks**: the NixGuard app adds `--requires-encryption` (Windows: `-requiresEncryption`) when your compliance standards include SOC 2, NIST SP 800-53, ISO 27001, GDPR, HIPAA, PCI DSS, PIPEDA or CIS Controls, and `--soc2` (`-soc2`) for SOC 2. The scripts then install a disk-encryption status check (LUKS, FileVault or BitLocker) and, on Linux and Windows, the NixGuard SOC 2 SCA policy (`sca/`) locally on the endpoint. The scripts never call the NixGuard API.
+- **Tenant-unique agent names**: the scripts append a 6-character suffix derived from the group label (`web-01` becomes `web-01-f23132`), so a reinstall replaces only your own earlier agent on a shared manager.
 - **Active response for threat detection and remediation**: installs `remove-threat` (quarantine or delete a flagged file) and `nixguard-remediate` (block an IP, restart a service, or upgrade a package).
 - **Linux audit support**: installs and enables `auditd`.
 
@@ -26,7 +27,7 @@ It is the group-label variant of [nixguard-agent-setup](https://github.com/thene
 | macOS | Intel (x86_64) or Apple silicon (arm64); root via `sudo`; Homebrew recommended (used to install `jq`) |
 | Windows | 64-bit Windows; PowerShell run as Administrator |
 
-You also need the **address of your NixGuard manager**, an **agent name** for this machine, and your **group label** (Linux and Windows). The macOS script in this repository takes a **NixGuard API key** instead of a group label (see below).
+You also need the **address of your NixGuard manager**, an **agent name** for this machine, and your **group label** (all three platforms).
 
 ## Quick start / Installation
 
@@ -36,26 +37,26 @@ Download the script for your platform, review it, then run it with administrator
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/linux/agent-automatic-setup.sh
-sudo bash agent-automatic-setup.sh <manager_address> <agent_name> <group_label>
+sudo bash agent-automatic-setup.sh <manager_address> <agent_name> <group_label> [--requires-encryption] [--soc2]
 ```
 
 ### Windows (PowerShell as Administrator)
 
 ```powershell
 Invoke-WebRequest -Uri https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/windows/agent-automatic-setup.ps1 -OutFile agent-automatic-setup.ps1
-powershell -ExecutionPolicy Bypass -File .\agent-automatic-setup.ps1 -agentName <agent_name> -ipAddress <manager_address> -groupLabel <group_label>
+powershell -ExecutionPolicy Bypass -File .\agent-automatic-setup.ps1 -agentName <agent_name> -ipAddress <manager_address> -groupLabel <group_label> [-requiresEncryption] [-soc2]
 ```
 
 ### macOS
 
-The macOS script is the same as in [nixguard-agent-setup](https://github.com/thenexlabs/nixguard-agent-setup) and takes an API key as its third argument:
+The macOS script takes the group label as its third argument (it used to take an API key and enroll into the `default` group):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/mac/agent-automatic-setup.sh
-sudo bash agent-automatic-setup.sh <manager_address> <agent_name> <api_key>
+sudo bash agent-automatic-setup.sh <manager_address> <agent_name> <group_label> [--requires-encryption]
 ```
 
-If your NixGuard compliance standards require it, it also installs FileVault monitoring.
+With `--requires-encryption` it also installs FileVault monitoring.
 
 ## Usage
 
@@ -81,11 +82,11 @@ Run from a clone of this repository (`git clone https://github.com/thenexlabs/ni
 | --- | --- | --- | --- |
 | Wazuh agent | 4.9.1 (`.deb` / `.rpm`), service `wazuh-agent` | 4.7.4 (`.pkg`), installed under `/Library/Ossec` | 4.9.1 (`.msi`), service `WazuhSvc` |
 | Extra packages | `auditd` and `audispd-plugins` (`audit` on RHEL family), `jq`; runs `apt-get -f install` on Debian family | `jq` via Homebrew if missing | Python 3.12.4 (all users) and PyInstaller, used to build the active-response `.exe` files |
-| Encryption check | Not installed by the setup script | `filevault_check.sh` via LaunchDaemon `com.nixguard.filevaultcheck` every 5 minutes (if required) | `bitlocker_check.ps1` via scheduled task `Wazuh-BitLocker-Check` every 5 minutes, as SYSTEM (if required) |
+| Encryption check | `luks_check.sh` via root cron every 10 minutes (if required) | `filevault_check.sh` via LaunchDaemon `com.nixguard.filevaultcheck` every 5 minutes (if required) | `bitlocker_check.ps1` via scheduled task `Wazuh-BitLocker-Check` every 5 minutes, as SYSTEM (if required) |
 | Active response | `remove-threat.sh`, `nixguard-remediate.sh` | `remove-threat.sh`, `nixguard-remediate.sh` | `remove-threat.exe`, `nixguard-remediate.exe` |
 | Config | Replaces FIM `<directories>` in `ossec.conf` (backup saved as `ossec.conf.bak`), sets manager address and group | Appends FIM tuning to `ossec.conf` | Adds FIM directories, tuning and group to `ossec.conf` |
 
-**Network:** the agent connects outbound to your NixGuard manager using the standard Wazuh agent ports (1514/TCP for events, 1515/TCP for enrollment; the scripts do not change them). During setup the scripts also make HTTPS requests to `packages.wazuh.com`, `raw.githubusercontent.com` (this repository and [nixguard-agent-setup](https://github.com/thenexlabs/nixguard-agent-setup), which hosts the shared active-response scripts), the NixGuard API (Windows and macOS, to read compliance preferences), and on Windows `python.org` and PyPI. No inbound ports are opened.
+**Network:** the agent connects outbound to your NixGuard manager using the standard Wazuh agent ports (1514/TCP for events, 1515/TCP for enrollment; the scripts do not change them). During setup the scripts also make HTTPS requests to `packages.wazuh.com`, `raw.githubusercontent.com` (this repository and [nixguard-agent-setup](https://github.com/thenexlabs/nixguard-agent-setup), which hosts the shared active-response scripts) and on Windows `python.org` and PyPI. No inbound ports are opened.
 
 **Warning:** setup removes any existing Wazuh agent on the machine first. On macOS the whole `/Library/Ossec` directory is deleted.
 

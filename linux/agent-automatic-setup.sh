@@ -1,9 +1,25 @@
 #!/bin/bash
-# ./scriptname.sh "your_manager_ip" "your_agent_name" "group_label"
+# ./scriptname.sh "your_manager_ip" "your_agent_name" "group_label" [--requires-encryption] [--soc2]
+
+# Positional arguments, then optional flags set by the NixGuard app from the account's compliance standards:
+#   --requires-encryption  install the disk-encryption status check
+#   --soc2                 install the NixGuard SOC 2 SCA policy locally on this endpoint
+REQUIRES_ENCRYPTION=false
+SOC2=false
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --requires-encryption) REQUIRES_ENCRYPTION=true ;;
+        --soc2) SOC2=true ;;
+        --*) echo "Unknown option: $arg" >&2; exit 1 ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+set -- "${POSITIONAL[@]}"
 
 # Check if three arguments are passed
 if [ "$#" -ne 3 ]; then
-    echo "Usage: ./scriptname.sh <manager_ip> <agent_name> <group_label>"
+    echo "Usage: ./scriptname.sh <manager_ip> <agent_name> <group_label> [--requires-encryption] [--soc2]"
     exit 1
 fi
 
@@ -11,6 +27,11 @@ fi
 MANAGER_IP=$1
 AGENT_NAME=$2
 GROUP_LABEL=$3
+
+# Agent names are global on the shared manager. A short suffix derived from the group label makes this
+# name unique to this account, so a reinstall replaces only this account's own agent.
+NAME_SUFFIX=$(printf '%s' "$GROUP_LABEL" | sha256sum | cut -c1-6)
+case "$AGENT_NAME" in *"-$NAME_SUFFIX") ;; *) AGENT_NAME="$AGENT_NAME-$NAME_SUFFIX" ;; esac
 
 # Function to detect the distribution and architecture
 detect_distro_arch() {
@@ -275,6 +296,34 @@ install_wazuh_agent() {
     optimize_syscheck_performance $ossecConfPath
 
     echo "Directory monitoring configuration added successfully."
+
+    # ==========================================
+    # COMPLIANCE: ENCRYPTION CHECK (LUKS) AND SOC 2 POLICY
+    # ==========================================
+    if [ "$REQUIRES_ENCRYPTION" = true ]; then
+        echo "Compliance standards require endpoint encryption tracking. Installing LUKS monitor..."
+        luksScriptPath="/var/ossec/bin/luks_check.sh"
+        if sudo wget -q -O "$luksScriptPath" "https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/linux/active-response/luks_check.sh"; then
+            sudo chmod 750 "$luksScriptPath"
+            sudo chown root:wazuh "$luksScriptPath"
+            (sudo crontab -l 2>/dev/null | grep -v "luks_check.sh" || true; echo "*/10 * * * * $luksScriptPath >/dev/null 2>&1") | sudo crontab -
+            if ! sudo grep -q "/var/log/luks_status.log" "$ossecConfPath"; then
+                printf '%s\n' '<ossec_config>' '  <localfile>' '    <location>/var/log/luks_status.log</location>' '    <log_format>json</log_format>' '  </localfile>' '</ossec_config>' | sudo tee -a "$ossecConfPath" >/dev/null
+            fi
+        else
+            echo "WARNING: could not download luks_check.sh; encryption check not installed." >&2
+        fi
+    fi
+    if [ "$SOC2" = true ]; then
+        # Local policy: it checks this endpoint only, and may run its own commands (remote policies may not).
+        if sudo wget -q -O /var/ossec/ruleset/sca/sca_soc2_linux.yml "https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/sca/sca_soc2_linux.yml"; then
+            sudo chown root:wazuh /var/ossec/ruleset/sca/sca_soc2_linux.yml
+            sudo chmod 640 /var/ossec/ruleset/sca/sca_soc2_linux.yml
+            echo "Installed the NixGuard SOC 2 policy."
+        else
+            echo "WARNING: could not download the SOC 2 policy." >&2
+        fi
+    fi
 
     # ==========================================
     # STEP 3: ACTIVE RESPONSE REMEDIATION DEPLOYMENT
