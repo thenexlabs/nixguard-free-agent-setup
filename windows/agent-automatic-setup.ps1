@@ -1,8 +1,24 @@
 param (
   [string]$agentName,
   [string]$ipAddress,
-  [string]$groupLabel
+  [string]$groupLabel,
+  # Set by the NixGuard app when the account's compliance standards require endpoint encryption.
+  [switch]$requiresEncryption,
+  # Set by the NixGuard app when the account's compliance standards include SOC 2.
+  [switch]$soc2
 )
+
+if ([string]::IsNullOrWhiteSpace($groupLabel)) {
+    Write-Error "Usage: agent-automatic-setup.ps1 -agentName <name> -ipAddress <manager> -groupLabel <group> [-requiresEncryption] [-soc2]"
+    exit 1
+}
+
+# Agent names are global on the shared manager. A short suffix derived from the group label makes this
+# name unique to this account, so a reinstall replaces only this account's own agent.
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$nameSuffix = (-join ($sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($groupLabel)) | ForEach-Object { $_.ToString('x2') })).Substring(0, 6)
+if (-not $agentName.EndsWith("-$nameSuffix")) { $agentName = "$agentName-$nameSuffix" }
+Write-Host "Agent name: $agentName"
 
 # Check if the system is 64-bit or 32-bit
 if ([IntPtr]::Size -eq 8) {
@@ -155,86 +171,9 @@ Set-Content -Path $configPath -Value $config
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-# Define the API URL
-$API_URL = "https://api.thenex.world/get-user"
-# $API_URL = "http://localhost:9000/.netlify/functions/get-user"
-
-# Create the JSON payload
-$JSON_PAYLOAD = @{
-    groupLabel = $groupLabel
-} | ConvertTo-Json -Depth 10
-
-# Send the POST request and capture the response
-$response = Invoke-RestMethod -Uri $API_URL -Method Post -Body $JSON_PAYLOAD -ContentType "application/json"
-
-# Extract the "token" field from the JSON response
-$token = $response.token
-
-Function Decode-JWT {
-    param (
-        [string]$jwtToken
-    )
-
-    # Split the token into its three parts (header, payload, signature)
-    $tokenParts = $jwtToken -split '\.'
-
-    if ($tokenParts.Length -ge 2) {
-        # Get the payload (second part of the JWT token)
-        $payload = $tokenParts[1]
-
-        # Convert Base64 URL to standard Base64
-        $standardBase64Payload = $payload.Replace("-", "+").Replace("_", "/")
-        switch ($standardBase64Payload.Length % 4) {
-            1 { $standardBase64Payload += "===" }
-            2 { $standardBase64Payload += "==" }
-            3 { $standardBase64Payload += "=" }
-        }
-
-        try {
-            # Decode the payload using UTF8 encoding
-            $decodedPayload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($standardBase64Payload))
-
-            # Parse the decoded payload JSON
-            $payloadData = $decodedPayload | ConvertFrom-Json
-
-            # Return the parsed object
-            return $payloadData
-        } catch {
-            Write-Error "Failed to decode payload: $_"
-        }
-    } else {
-        Write-Error "Invalid JWT token format."
-    }
-
-    # Return $null if the function fails
-    return $null
-}
-
-# Decode the extracted token
-$decodedPayload = Decode-JWT -jwtToken $token
-
-# Print or handle the decoded payload outside the function
-if ($decodedPayload -ne $null) {
-    # Check if compliance standards require encryption
-    $requiresEncryption = $false
-
-    $requiredStandards = @(
-        'soc2',
-        'nist_sp_800_53',
-        'iso27001',
-        'gdpr',
-        'hipaa',
-        'pci_dss',
-        'pipeda',
-        'cis_controls'
-    )
-
-    foreach ($standard in $requiredStandards) {
-        if ($decodedPayload.cybersecurityPreferences.complianceStandards -contains $standard) {            $requiresEncryption = $true
-            break
-        }
-    }
-
+# Compliance-driven encryption monitoring. The NixGuard app passes -requiresEncryption when the account's
+# standards (SOC 2, NIST SP 800-53, ISO 27001, GDPR, HIPAA, PCI DSS, PIPEDA, CIS Controls) require it,
+# so the installer never needs an account token.
     if ($requiresEncryption) {
         Write-Host "Compliance standards require endpoint encryption. Configuring BitLocker monitoring for Wazuh." -ForegroundColor Green
 
@@ -346,8 +285,20 @@ if ($decodedPayload -ne $null) {
     } else {
         Write-Host "Compliance standards do not require endpoint encryption. Skipping BitLocker configuration." -ForegroundColor Yellow
     }
-} else {
-    Write-Output "Failed to decode the JWT token."
+
+# SOC 2: install the NixGuard SOC 2 SCA policy locally, so it checks this endpoint only.
+# Policies in the agent's ruleset\sca folder are loaded by the agent's SCA module.
+if ($soc2) {
+    try {
+        $scaDir = Join-Path $ossecAgentPath "ruleset\sca"
+        if (-not (Test-Path $scaDir)) { New-Item -Path $scaDir -ItemType Directory -Force | Out-Null }
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/sca/sca_soc2_windows.yml" -OutFile (Join-Path $scaDir "sca_soc2_windows.yml") -UseBasicParsing
+        Write-Host "Installed the NixGuard SOC 2 policy." -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Could not install the SOC 2 policy: $($_.Exception.Message)"
+    }
 }
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -5,7 +5,7 @@
 # an intelligent, compliance-driven feature installation based on user preferences.
 #
 # Usage (as a single command):
-# curl -sS https://.../agent-automatic-setup.sh | sudo bash -s -- <MANAGER_IP> <AGENT_NAME> <API_KEY>
+# curl -sS https://.../agent-automatic-setup.sh | sudo bash -s -- <MANAGER_IP> <AGENT_NAME> <GROUP_LABEL> [--requires-encryption]
 #
 
 # Exit immediately if any command fails for robust error handling.
@@ -14,20 +14,42 @@ set -e
 set -E
 
 # --- 1. Validate Input & Define Variables ---
+# Positional arguments, then optional flags set by the NixGuard app from the account's compliance standards:
+#   --requires-encryption  install the disk-encryption status check
+#   --soc2                 install the NixGuard SOC 2 SCA policy locally on this endpoint
+REQUIRES_ENCRYPTION=false
+SOC2=false
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --requires-encryption) REQUIRES_ENCRYPTION=true ;;
+        --soc2) SOC2=true ;;
+        --*) echo "Unknown option: $arg" >&2; exit 1 ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+set -- "${POSITIONAL[@]}"
+
 if [ "$#" -ne 3 ]; then
     echo "Error: Invalid number of arguments." >&2
-    echo "Usage: sudo bash -s -- <MANAGER_IP> <AGENT_NAME> <API_KEY>" >&2
+    echo "Usage: sudo bash -s -- <MANAGER_IP> <AGENT_NAME> <GROUP_LABEL> [--requires-encryption]" >&2
     exit 1
 fi
 
 MANAGER_IP=$1
-AGENT_NAME_BASE=$2 # Store the base name
-API_KEY=$3
-GROUP_LABEL="default"
+AGENT_NAME=$2
+# The account's agent group on the shared manager (the NixGuard app passes it). Agents used to enroll
+# into "default", where customers' agents were mixed and the group cleanup removed all but one.
+GROUP_LABEL=$3
+
+# Agent names are global on the shared manager. A short suffix derived from the group label makes this
+# name unique to this account, so a reinstall replaces only this account's own agent.
+NAME_SUFFIX=$(printf '%s' "$GROUP_LABEL" | shasum -a 256 | cut -c1-6)
+case "$AGENT_NAME" in *"-$NAME_SUFFIX") ;; *) AGENT_NAME="$AGENT_NAME-$NAME_SUFFIX" ;; esac
 
 # URLs
 # FIXED: Pointing directly to raw.githubusercontent.com
-REPO_BASE_URL="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/mac"
+REPO_BASE_URL="https://raw.githubusercontent.com/thenexlabs/nixguard-free-agent-setup/main/mac"
 WAZUH_PKG_URL_INTEL="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.intel64.pkg"
 WAZUH_PKG_URL_ARM="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.arm64.pkg"
 
@@ -36,50 +58,9 @@ AR_SCRIPT_URL="${REPO_BASE_URL}/active-response/remove-threat.sh"
 REMEDIATE_SCRIPT_URL="${REPO_BASE_URL}/active-response/nixguard-remediate.sh"
 FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/active-response/filevault_check.sh"
 
-GET_USER_API_URL="https://api.thenex.world/get-user"
 FIM_CONF_URL="${REPO_BASE_URL}/config/fim.conf"
 FILEVAULT_CONF_URL="${REPO_BASE_URL}/config/filevault.conf"
 
-
-# --- 2. Dependency Management ---
-check_dependencies() {
-    echo "--- Checking for required dependencies (jq) ---"
-    if ! command -v jq &> /dev/null; then
-        echo "jq is not installed. Attempting to install with Homebrew..."
-        if ! command -v brew &> /dev/null; then
-            echo "Warning: Homebrew not found. Cannot install jq." >&2
-            return 1
-        fi
-        brew install jq
-    fi
-    echo "jq is available."
-    return 0
-}
-
-# --- 3. Fetch User Compliance Preferences ---
-fetch_user_preferences() {
-    # Redirect status messages to stderr (>&2) to prevent them from being captured.
-    echo "--- Fetching user compliance preferences ---" >&2
-    
-    local user_api_key="$1"
-    local api_payload=$(printf '{"apiKey":"%s"}' "$user_api_key")
-    local response
-    response=$(curl --request POST --header "Content-Type: application/json" --silent --show-error --data "$api_payload" "$GET_USER_API_URL")
-
-    if [ -z "$response" ] || ! echo "$response" | jq -e '.token' > /dev/null 2>&1; then
-        echo "Warning: Could not retrieve a valid token from the user API." >&2
-        echo "[]" # Return an empty JSON array on stdout
-        return
-    fi
-    
-    local jwt_payload
-    jwt_payload=$(echo "$response" | jq -r '.token | split(".")[1] | @base64d | fromjson')
-    local standards
-    standards=$(echo "$jwt_payload" | jq -r '.cybersecurityPreferences.complianceStandards')
-    
-    # This is the function's actual return value, so it stays on stdout.
-    echo "$standards"
-}
 
 # --- 4. Uninstall Existing Agent (for Idempotency) ---
 uninstall_wazuh_agent() {
@@ -111,7 +92,7 @@ install_and_register_agent() {
     curl -Lo "/tmp/wazuh-agent.pkg" "$WAZUH_PKG_URL"
     
     # Note: We no longer pass WAZUH_MANAGER here as it's unreliable.
-    WAZUH_AGENT_NAME="${AGENT_NAME}" WAZUH_GROUP="${GROUP_LABEL}" \
+    WAZUH_AGENT_NAME="${AGENT_NAME}" WAZUH_AGENT_GROUP="${GROUP_LABEL}" \
     installer -pkg "/tmp/wazuh-agent.pkg" -target /
     
     rm -f "/tmp/wazuh-agent.pkg"
@@ -119,7 +100,7 @@ install_and_register_agent() {
 
     echo "Registering agent '${AGENT_NAME}' with manager..."
     set +e
-    /Library/Ossec/bin/agent-auth -m "${MANAGER_IP}" -A "${AGENT_NAME}"
+    /Library/Ossec/bin/agent-auth -m "${MANAGER_IP}" -A "${AGENT_NAME}" -G "${GROUP_LABEL}"
     set -e
     echo "Agent successfully registered."
 }
@@ -147,7 +128,7 @@ configure_ossec_conf() {
     echo "Configuration file found and is not empty."
 
     echo "Applying File Integrity Monitoring (FIM) rules by downloading config..."
-    curl -sS "$FIM_CONF_URL" >> "$ossecConfPath"
+    curl -fsS "$FIM_CONF_URL" >> "$ossecConfPath" || echo "Warning: FIM config not available; keeping the default." >&2
     
     echo "Custom FIM configuration applied successfully."
 }
@@ -222,7 +203,9 @@ install_filevault_monitoring() {
     launchctl load "$plistPath"
     
     echo "Configuring agent to monitor FileVault status log by downloading config..."
-    curl -sS "$FILEVAULT_CONF_URL" >> "$ossecConfPath"
+    if ! grep -q "filevault_status.log" "$ossecConfPath"; then
+        printf '%s\n' '<ossec_config>' '  <localfile>' '    <location>/Library/Ossec/logs/filevault_status.log</location>' '    <log_format>json</log_format>' '  </localfile>' '</ossec_config>' >> "$ossecConfPath"
+    fi
 
     echo "FileVault monitoring script installed and scheduled."
 }
@@ -262,36 +245,11 @@ install_ar_script
 
 # --- Intelligent Feature Deployment ---
 
-# 1. Start with the default state: encryption is NOT required.
-ENCRYPTION_REQUIRED=false
-
-# 2. Check for reasons to enable it.
-if ! check_dependencies; then
-    # Reason 1: Dependencies are missing. Fail-safe to the secure option.
-    echo "Warning: jq dependency not met. Defaulting to encryption monitoring enabled." >&2
-    ENCRYPTION_REQUIRED=true
-else
-    # Dependencies are fine, so we can check the user's actual preferences.
-    COMPLIANCE_STANDARDS=$(fetch_user_preferences "$API_KEY")
-    
-    # --- DEBUGGING: Print the exact data received from the API ---
-    echo "--- Compliance Standards from API ---" >&2
-    # FIXED: Corrected typo from COMPLIONS_STANDARDS to COMPLIANCE_STANDARDS
-    echo "$COMPLIANCE_STANDARDS" >&2
-    echo "-------------------------------------" >&2
-
-    # This is the full, correct list of standards.
-    REQUIRED_STANDARDS=("soc2" "nist_sp_800_53" "iso27001" "gdpr" "hipaa" "pci_dss" "pipeda" "cis_controls")
-    
-    for standard in "${REQUIRED_STANDARDS[@]}"; do
-        # The jq command checks if the JSON array contains the current standard.
-        if echo "$COMPLIANCE_STANDARDS" | jq -e --arg s "$standard" '. | index($s)' > /dev/null 2>&1; then
-            # Reason 2: The user's profile requires it.
-            echo "Compliance standard '$standard' found, enabling encryption monitoring." >&2
-            ENCRYPTION_REQUIRED=true
-            break
-        fi
-    done
+# The NixGuard app passes --requires-encryption when the account's compliance standards require it,
+# so the installer never needs an account token.
+ENCRYPTION_REQUIRED=$REQUIRES_ENCRYPTION
+if [ "$SOC2" = true ]; then
+    echo "No SOC 2 policy for macOS yet; skipping." >&2
 fi
 
 # 3. Make the final decision.
