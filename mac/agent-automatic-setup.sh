@@ -19,14 +19,19 @@ set -E
 #   --soc2                 install the NixGuard SOC 2 SCA policy locally on this endpoint
 REQUIRES_ENCRYPTION=false
 SOC2=false
+#   --agent-key <key>      the key of the one agent the NixGuard app registered for this command; the agent
+#                          uses it instead of enrolling itself (shared managers no longer accept self-enrollment)
+AGENT_KEY=""
 POSITIONAL=()
-for arg in "$@"; do
-    case "$arg" in
+while [ "$#" -gt 0 ]; do
+    case "$1" in
         --requires-encryption) REQUIRES_ENCRYPTION=true ;;
         --soc2) SOC2=true ;;
-        --*) echo "Unknown option: $arg" >&2; exit 1 ;;
-        *) POSITIONAL+=("$arg") ;;
+        --agent-key) AGENT_KEY="${2:-}"; shift ;;
+        --*) echo "Unknown option: $1" >&2; exit 1 ;;
+        *) POSITIONAL+=("$1") ;;
     esac
+    shift
 done
 set -- "${POSITIONAL[@]}"
 
@@ -61,6 +66,20 @@ FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/active-response/filevault_check.sh"
 FIM_CONF_URL="${REPO_BASE_URL}/config/fim.conf"
 FILEVAULT_CONF_URL="${REPO_BASE_URL}/config/filevault.conf"
 
+
+# Writes the agent key issued by the NixGuard app (base64 of "<id> <name> <ip> <key>") to client.keys.
+import_agent_key() {
+    local keysFile="$1" decoded
+    decoded=$(printf '%s' "$AGENT_KEY" | base64 --decode 2>/dev/null || true)
+    if ! printf '%s' "$decoded" | grep -qE '^[0-9]{3,8} [A-Za-z0-9._-]+ [^ ]+ [0-9a-f]{32,128}$'; then
+        echo "Error: the agent key is not valid. Create a new install command in NixGuard." >&2
+        exit 1
+    fi
+    printf '%s\n' "$decoded" | sudo tee "$keysFile" >/dev/null
+    sudo chown root:wazuh "$keysFile"
+    sudo chmod 640 "$keysFile"
+    echo "Agent key installed for $(printf '%s' "$decoded" | cut -d' ' -f2)."
+}
 
 # --- 4. Uninstall Existing Agent (for Idempotency) ---
 uninstall_wazuh_agent() {
@@ -98,11 +117,16 @@ install_and_register_agent() {
     rm -f "/tmp/wazuh-agent.pkg"
     echo "Agent package installed."
 
-    echo "Registering agent '${AGENT_NAME}' with manager..."
-    set +e
-    /Library/Ossec/bin/agent-auth -m "${MANAGER_IP}" -A "${AGENT_NAME}" -G "${GROUP_LABEL}"
-    set -e
-    echo "Agent successfully registered."
+    if [ -n "$AGENT_KEY" ]; then
+        # Registered by the NixGuard app: use its key, no self-enrollment.
+        import_agent_key /Library/Ossec/etc/client.keys
+    else
+        echo "Registering agent '${AGENT_NAME}' with manager..."
+        set +e
+        /Library/Ossec/bin/agent-auth -m "${MANAGER_IP}" -A "${AGENT_NAME}" -G "${GROUP_LABEL}"
+        set -e
+        echo "Agent successfully registered."
+    fi
 }
 
 # --- 6. Apply Custom FIM and Log Collection Configuration ---

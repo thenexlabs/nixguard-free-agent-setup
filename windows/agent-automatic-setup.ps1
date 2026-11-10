@@ -5,7 +5,10 @@ param (
   # Set by the NixGuard app when the account's compliance standards require endpoint encryption.
   [switch]$requiresEncryption,
   # Set by the NixGuard app when the account's compliance standards include SOC 2.
-  [switch]$soc2
+  [switch]$soc2,
+  # The key of the one agent the NixGuard app registered for this command (base64 of "<id> <name> <ip> <key>").
+  # The agent uses it instead of enrolling itself; shared managers no longer accept self-enrollment.
+  [string]$agentKey
 )
 
 if ([string]::IsNullOrWhiteSpace($groupLabel)) {
@@ -325,6 +328,18 @@ if ($content -notmatch '<enrollment>') {
 if ($content -notmatch '<groups>') {
     $groupSection = "<groups>${groupLabel}</groups>"
     $content = $content -replace '</enrollment>', "$groupSection`n</enrollment>"
+}
+
+# With a key from the NixGuard app: install it and never self-enroll.
+if ($agentKey) {
+    try { $decodedKey = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($agentKey)).Trim() } catch { $decodedKey = '' }
+    if ($decodedKey -notmatch '^[0-9]{3,8} [A-Za-z0-9._-]+ [^ ]+ [0-9a-f]{32,128}$') {
+        Write-Error "The agent key is not valid. Create a new install command in NixGuard."
+        exit 1
+    }
+    [System.IO.File]::WriteAllText((Join-Path $ossecAgentPath "client.keys"), "$decodedKey`n")
+    $content = $content -replace '(?s)(<enrollment>.*?)<enabled>yes</enabled>', '$1<enabled>no</enabled>'
+    Write-Host "Agent key installed for $(($decodedKey -split ' ')[1])."
 }
 
 # Write the modified content back to the ossec.conf
