@@ -374,6 +374,13 @@ install_wazuh_agent() {
     sudo chmod 750 $remediatePath
     sudo chown root:wazuh $remediatePath
 
+    # 3. nixguard-unblock-ip.sh removes a NixGuard IP block (run from the NixGuard app's Undo / Unblock)
+    unblockUrl="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/linux/active-response/nixguard-unblock-ip.sh"
+    unblockPath="$destDir/nixguard-unblock-ip.sh"
+    sudo wget -O $unblockPath $unblockUrl
+    sudo chmod 750 $unblockPath
+    sudo chown root:wazuh $unblockPath
+
     echo "Active Response remediation configurations added successfully."
 
     # With a key from the NixGuard app: use it, and never self-enroll.
