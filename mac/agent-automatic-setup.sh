@@ -60,7 +60,10 @@ WAZUH_PKG_URL_ARM="https://packages.wazuh.com/4.x/macos/wazuh-agent-4.7.4-1.arm6
 
 # FIXED: Appended /active-response/ subfolder to the download URLs
 AR_SCRIPT_URL="${REPO_BASE_URL}/active-response/remove-threat.sh"
-REMEDIATE_SCRIPT_URL="${REPO_BASE_URL}/active-response/nixguard-remediate.sh"
+# The IP block and unblock scripts are shared with the paid installer: one copy, in nixguard-agent-setup.
+SHARED_AR_BASE_URL="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/mac/active-response"
+REMEDIATE_SCRIPT_URL="${SHARED_AR_BASE_URL}/nixguard-remediate.sh"
+UNBLOCK_SCRIPT_URL="${SHARED_AR_BASE_URL}/nixguard-unblock-ip.sh"
 FILEVAULT_SCRIPT_URL="${REPO_BASE_URL}/active-response/filevault_check.sh"
 
 FIM_CONF_URL="${REPO_BASE_URL}/config/fim.conf"
@@ -186,7 +189,13 @@ install_ar_script() {
     curl -Lo "$remediatePath" "$REMEDIATE_SCRIPT_URL"
     chmod 750 "$remediatePath"
     chown root:wazuh "$remediatePath"
-    
+
+    # 3. nixguard-unblock-ip.sh removes a NixGuard IP block (run from the NixGuard app's Undo / Unblock)
+    local unblockPath="$destDir/nixguard-unblock-ip.sh"
+    curl -Lo "$unblockPath" "$UNBLOCK_SCRIPT_URL"
+    chmod 750 "$unblockPath"
+    chown root:wazuh "$unblockPath"
+
     echo "Active Response scripts installed."
 }
 

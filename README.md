@@ -84,10 +84,25 @@ Run from a clone of this repository (`git clone https://github.com/thenexlabs/ni
 | Wazuh agent | 4.9.1 (`.deb` / `.rpm`), service `wazuh-agent` | 4.7.4 (`.pkg`), installed under `/Library/Ossec` | 4.9.1 (`.msi`), service `WazuhSvc` |
 | Extra packages | `auditd` and `audispd-plugins` (`audit` on RHEL family), `jq`; runs `apt-get -f install` on Debian family | `jq` via Homebrew if missing | Python 3.12.4 (all users) and PyInstaller, used to build the active-response `.exe` files |
 | Encryption check | `luks_check.sh` via root cron every 10 minutes (if required) | `filevault_check.sh` via LaunchDaemon `com.nixguard.filevaultcheck` every 5 minutes (if required) | `bitlocker_check.ps1` via scheduled task `Wazuh-BitLocker-Check` every 5 minutes, as SYSTEM (if required) |
-| Active response | `remove-threat.sh`, `nixguard-remediate.sh` | `remove-threat.sh`, `nixguard-remediate.sh` | `remove-threat.exe`, `nixguard-remediate.exe` |
+| Active response | `remove-threat.sh`, `nixguard-remediate.sh`, `nixguard-unblock-ip.sh`, `nixguard-harden.sh` | `remove-threat.sh`, `nixguard-remediate.sh`, `nixguard-unblock-ip.sh` | `remove-threat.exe`, `nixguard-remediate.exe`, `nixguard-unblock-ip.exe` |
 | Config | Replaces FIM `<directories>` in `ossec.conf` (backup saved as `ossec.conf.bak`), sets manager address and group | Appends FIM tuning to `ossec.conf` | Adds FIM directories, tuning and group to `ossec.conf` |
 
 **Network:** the agent connects outbound to your NixGuard manager using the standard Wazuh agent ports (1514/TCP for events, 1515/TCP for enrollment; the scripts do not change them). During setup the scripts also make HTTPS requests to `packages.wazuh.com`, `raw.githubusercontent.com` (this repository and [nixguard-agent-setup](https://github.com/thenexlabs/nixguard-agent-setup), which hosts the shared active-response scripts) and on Windows `python.org` and PyPI. No inbound ports are opened.
+
+**IP block results and unblock:** `nixguard-remediate` and `nixguard-unblock-ip` come from
+[nixguard-agent-setup](https://github.com/thenexlabs/nixguard-agent-setup) on every platform, the same copies the paid installer
+uses. Each IP block or unblock writes one result line that the NixGuard app reads back, so the app can show the block as
+verified and offer Undo. See that repository's README, "IP block results and unblock".
+
+**Updating an enrolled endpoint:** setup downloads the active-response scripts once. To get the current block and unblock
+scripts onto an endpoint that is already enrolled, without re-enrolling it, run the update script for its platform from
+nixguard-agent-setup (as root or Administrator). It replaces only those scripts; the agent keeps its ID and group.
+
+| Platform | Command |
+| --- | --- |
+| Linux | `curl -fsSLO https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/linux/update-active-response.sh && sudo bash update-active-response.sh` |
+| macOS | `curl -fsSLO https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/mac/update-active-response.sh && sudo bash update-active-response.sh` |
+| Windows | `Invoke-WebRequest -Uri https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/windows/update-active-response.ps1 -OutFile update-active-response.ps1; powershell -ExecutionPolicy Bypass -File .\update-active-response.ps1` |
 
 **Warning:** setup removes any existing Wazuh agent on the machine first. On macOS the whole `/Library/Ossec` directory is deleted.
 
