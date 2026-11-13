@@ -381,6 +381,13 @@ install_wazuh_agent() {
     sudo chmod 750 $unblockPath
     sudo chown root:wazuh $unblockPath
 
+    # 4. nixguard-harden.sh applies or undoes one named endpoint hardening fix (the NixGuard app's Hardening tab)
+    hardenUrl="https://raw.githubusercontent.com/thenexlabs/nixguard-agent-setup/main/linux/active-response/nixguard-harden.sh"
+    hardenPath="$destDir/nixguard-harden.sh"
+    sudo wget -O $hardenPath $hardenUrl
+    sudo chmod 750 $hardenPath
+    sudo chown root:wazuh $hardenPath
+
     echo "Active Response remediation configurations added successfully."
 
     # With a key from the NixGuard app: use it, and never self-enroll.
